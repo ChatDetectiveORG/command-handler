@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -60,6 +61,8 @@ func ListenToRabbitmq(cfg *config.Config, ctx context.Context, wg *sync.WaitGrou
 	}
 	defer rabbitmqChannel.Close()
 
+	go hanleError(errors, ctx, wg)
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -71,6 +74,20 @@ func ListenToRabbitmq(cfg *config.Config, ctx context.Context, wg *sync.WaitGrou
 				return e.FromError(nil, "RabbitMQ consumer channel closed").WithSeverity(e.Critical)
 			}
 			initNewHandlerOrPushToExisting(delivery, ctx, wg, cfg)
+		}
+	}
+}
+
+func hanleError(src chan (*e.ErrorInfo), context context.Context, wg *sync.WaitGroup) {
+	wg.Add(1)
+	defer wg.Done()
+
+	for {
+		select {
+		case <-context.Done():
+			return
+		case err := <-src:
+			log.Println(err.JSON())
 		}
 	}
 }
