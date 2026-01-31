@@ -18,6 +18,7 @@ type RuntimeConfig struct {
 	NumRoutingGorutines int
 	PodID string
 	PodType string
+	HandlerLiveDuration time.Duration
 }
 
 type RabbitMQConfig struct {
@@ -80,6 +81,7 @@ func FetchConfig() (*Config, *e.ErrorInfo) {
 			NumRoutingGorutines: viper.GetInt("NUM_ROUTING_GOROUTINES"),
 			PodID: viper.GetString("POD_ID"),
 			PodType: "commands",
+			HandlerLiveDuration: time.Minute * 10,
 		},
 	}
 
