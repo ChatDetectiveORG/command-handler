@@ -1,6 +1,9 @@
 package rabbitmq
 
 import (
+	"fmt"
+	"os"
+
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -18,5 +21,32 @@ var RequiredModels = []Model{
 		Internal:   false,
 		NoWait:     false,
 		Args:       amqp.Table{}, // e.g. {"alternate-exchange": "ae.name"}
+	},
+
+	QueueModel{
+		Queue: "chatdetective.events.queue",
+		Durable: true,
+		AutoDelete: false,
+		Exclusive: false,
+		NoWait: false,
+		Args: amqp.Table{},
+	},
+
+	BindingModel{
+		Queue: "chatdetective.events.queue",
+		Exchange: "chatdetective.events",
+		RoutingKey: fmt.Sprintf("%s.*.*", os.Getenv("POD_ID")),
+		NoWait: false,
+		Args: amqp.Table{},
+	},
+
+	ExchangeModel{
+		Exchange: "chatdetective.output.send",
+		Kind: "direct",
+		Durable: true,
+		AutoDelete: false,
+		Internal: false,
+		NoWait: false,
+		Args: amqp.Table{},
 	},
 }
