@@ -89,7 +89,7 @@ func (c *commandFilter) Filter(update tele.Update) bool {
 			continue
 		}
 
-		if regexp.MustCompile(fmt.Sprintf(`^/[%s]{1,32}$`, command)).MatchString(update.Message.Text) {
+		if update.Message.Text == "/" + command {
 			return true
 		}
 	}

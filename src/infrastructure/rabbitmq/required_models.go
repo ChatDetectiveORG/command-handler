@@ -1,6 +1,9 @@
 package rabbitmq
 
 import (
+	"fmt"
+	"os"
+
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -32,7 +35,7 @@ var RequiredModels = []Model{
 	BindingModel{
 		Queue: "chatdetective.events.queue",
 		Exchange: "chatdetective.events",
-		RoutingKey: "chatdetective.events",
+		RoutingKey: fmt.Sprintf("%s.*.*", os.Getenv("POD_ID")),
 		NoWait: false,
 		Args: amqp.Table{},
 	},

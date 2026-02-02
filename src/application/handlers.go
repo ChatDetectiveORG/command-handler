@@ -16,7 +16,7 @@ type Router struct {
 func (r *Router) Dispatch(update tele.Update) *e.ErrorInfo {
 	for _, endpoint := range r.Endpoints {
 		err := endpoint.ExecuteIfFilterPasses(update, r.RabbitmqChannel)
-		if err != nil {
+		if !err.IsNil() {
 			r.ErrorChannel <- err.PushStack().WithData(map[string]any{"endpoint name": endpoint.Name})
 		}
 	}
