@@ -76,7 +76,7 @@ func InitRabbitMQ(config *config.Config, models []Model) *e.ErrorInfo {
 
 func NewRabbitmqChannel(cfg *config.Config) (*amqp.Channel, *e.ErrorInfo) {
 	client, err := GetClient(cfg)
-	if err != nil {
+	if !err.IsNil() {
 		return nil, err
 	}
 

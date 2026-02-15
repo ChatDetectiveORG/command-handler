@@ -65,6 +65,9 @@ func ListenToRabbitmq(cfg *config.Config, ctx context.Context, wg *sync.WaitGrou
 	if !err.IsNil() {
 		return err
 	}
+	// router is a package-level singleton and was initialized before rabbitmqChannel was set.
+	// Update it to use the live channel to avoid nil deref in PublishWithContext.
+	router.RabbitmqChannel = rabbitmqChannel
 	defer rabbitmqChannel.Close()
 
 	go hanleError(errors, ctx, wg)
@@ -166,6 +169,7 @@ func handle(args WorkerArgs) {
 			if !ok {
 				return
 			}
+			log.Printf("trace=%s received rk=%s", delivery.CorrelationId, delivery.RoutingKey)
 			updateBytes := delivery.Body
 			var update tele.Update
 			unwrappedError := json.Unmarshal(updateBytes, &update)
@@ -204,9 +208,10 @@ var router Router = Router{
 		{
 			handler: func(update tele.Update, timeout time.Duration) (handlerResponse, *e.ErrorInfo) {
 				return handlerResponse{
-					Method: "send_message",
+					Method: "text",
 					SendData: map[string]any{
 						"text": "Hello, world!",
+						"chat_id": update.Message.Chat.ID,
 					},
 					SenderBot: "@main",
 				}, e.Nil()

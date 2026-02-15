@@ -50,8 +50,8 @@ func newPool(config *config.Config) *redis.Pool {
 
 func NewRedisConnection(cfg *config.Config) (redis.Conn, *e.ErrorInfo) {
 	pool, err := GetPool(cfg)
-	if err != nil {
-		return nil, e.FromError(err, "failed to get redis pool")
+	if !err.IsNil() {
+		return nil, err
 	}
 
 	return pool.Get(), e.Nil()

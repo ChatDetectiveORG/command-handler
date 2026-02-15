@@ -3,8 +3,6 @@ package application
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"regexp"
 	"strings"
 	"time"
 
@@ -41,8 +39,12 @@ func (ep *Endpoint) ExecuteIfFilterPasses(update tele.Update, rabbitmqChannel *a
 		return nil
 	}
 
+	if rabbitmqChannel == nil {
+		return e.NewError("rabbitmq channel is nil", "rabbitmq channel is not initialized").WithSeverity(e.Critical)
+	}
+
 	resp, err := ep.handler(update, ep.timeout)
-	if err != nil {
+	if !err.IsNil() {
 		return err
 	}
 
