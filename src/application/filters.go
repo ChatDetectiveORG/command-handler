@@ -13,18 +13,18 @@ import (
 )
 
 type handlerResponse struct {
-	Method string `json:"method"`
-	SendData map[string]any `json:"send_data"`
-	SenderBot string `json:"sender_bot"` // Для механики зеркал
+	Method    string         `json:"method"`
+	SendData  map[string]any `json:"send_data"`
+	SenderBot string         `json:"sender_bot"` // Для механики зеркал
 }
 
 type handler func(update tele.Update, timeout time.Duration) (response handlerResponse, err *e.ErrorInfo)
 
 type Endpoint struct {
 	handler handler
-	filter filter
+	filter  filter
 	timeout time.Duration
-	Name string
+	Name    string
 }
 
 func (e *Endpoint) Init(name string, handler handler, filter filter, timeout time.Duration) {
@@ -53,7 +53,7 @@ func (ep *Endpoint) ExecuteIfFilterPasses(update tele.Update, rabbitmqChannel *a
 		return e.FromError(unwrappedError, "failed to marshal send data").WithSeverity(e.Critical)
 	}
 
-	publishContext, publishContextCancel := context.WithTimeout(context.Background(), 10 * time.Second)
+	publishContext, publishContextCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer publishContextCancel()
 
 	unwrappedError = rabbitmqChannel.PublishWithContext(
@@ -64,7 +64,7 @@ func (ep *Endpoint) ExecuteIfFilterPasses(update tele.Update, rabbitmqChannel *a
 		false,
 		amqp.Publishing{
 			ContentType: "application/json",
-			Body: jsonData,
+			Body:        jsonData,
 		},
 	)
 	if unwrappedError != nil {
@@ -90,8 +90,14 @@ func (c *commandFilter) Filter(update tele.Update) bool {
 		if update.Message.Text == "" {
 			continue
 		}
-
-		if update.Message.Text == "/" + command {
+		text := strings.TrimSpace(update.Message.Text)
+		prefix := "/" + command
+		if !strings.HasPrefix(text, prefix) {
+			continue
+		}
+		rest := strings.TrimPrefix(text, prefix)
+		// Telegram commands may be: "/cmd", "/cmd@bot", "/cmd arg1 arg2"
+		if rest == "" || strings.HasPrefix(rest, " ") || strings.HasPrefix(rest, "@") {
 			return true
 		}
 	}
@@ -147,7 +153,7 @@ func CallbackQueryJSON(matchCallbackDataArg string, matchCallbackDataKey string)
 }
 
 type filterChain struct {
-	filters []filter
+	filters  []filter
 	operator string
 }
 
@@ -172,14 +178,14 @@ func (f *filterChain) Filter(update tele.Update) bool {
 
 func And(filters ...filter) filter {
 	return &filterChain{
-		filters: filters,
+		filters:  filters,
 		operator: "and",
 	}
 }
 
 func Or(filters ...filter) filter {
 	return &filterChain{
-		filters: filters,
+		filters:  filters,
 		operator: "or",
 	}
 }

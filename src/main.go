@@ -3,6 +3,7 @@ package main
 import (
 	"app/src/application"
 	"app/src/infrastructure/config"
+	"app/src/infrastructure/metrics"
 	"context"
 	"os/signal"
 	"sync"
@@ -11,7 +12,6 @@ import (
 
 	// "app/src/infrastructure/postgresql"
 	"app/src/infrastructure/rabbitmq"
-	"app/src/infrastructure/redis"
 	"log"
 )
 
@@ -23,18 +23,10 @@ func main() {
 		log.Fatal(err.JSON())
 	}
 
-	err = redis.InitRedis(config)
-	if !err.IsNil() {
-		log.Fatal(err.JSON())
-	}
-
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	err = application.MakeAstatement(config)
-	if !err.IsNil() {
-		log.Fatal(err.JSON())
-	}
+	metrics.Start(ctx, config)
 
 	wg := &sync.WaitGroup{}
 	err = application.ListenToRabbitmq(config, ctx, wg)
@@ -45,11 +37,6 @@ func main() {
 	log.Println("Service started. Waiting for shutdown signal...")
 	<-ctx.Done()
 	log.Println("Shutdown signal received. Exiting...")
-
-	err = application.DeleteMyselfFromRedis(config)
-	if !err.IsNil() {
-		log.Fatal(err.JSON())
-	}
 
 	waitCh := make(chan struct{})
 	go func() {

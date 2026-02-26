@@ -4,16 +4,14 @@ import (
 	e "app/pkg/errors"
 	"app/src/infrastructure/config"
 	"app/src/infrastructure/rabbitmq"
-	"app/src/infrastructure/redis"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log"
-	"strings"
+	"os"
 	"sync"
 	"time"
 
-	redigo "github.com/gomodule/redigo/redis"
 	tele "gopkg.in/telebot.v4"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -24,29 +22,63 @@ var (
 	handlerTerminated = make(chan string, 1000)
 	errors            = make(chan *e.ErrorInfo, 1000)
 	rabbitmqChannel   *amqp.Channel
-	gcfg              *config.Config
 )
 
-func initRabbitmqQueue(cfg *config.Config) (<-chan amqp.Delivery, *amqp.Channel, *e.ErrorInfo) {
+const shardCount = 64
+
+func initRabbitmqQueue(cfg *config.Config) (<-chan amqp.Delivery, []string, *amqp.Channel, *e.ErrorInfo) {
 	rabbitmqChannel, err := rabbitmq.NewRabbitmqChannel(cfg)
 	if !err.IsNil() {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
-	consumer, unwrappedError := rabbitmqChannel.Consume(
-		"chatdetective.events.queue",
-		"main-consumer",
-		false, // Автоматически подтверждать поулчение
-		false,
-		false,
-		false,
-		amqp.Table{},
-	)
-	if unwrappedError != nil {
-		return nil, nil, e.FromError(unwrappedError, "Failed to init consumer for queue chatdetective.events.queue").WithSeverity(e.Critical)
+	// Reasonable default; per-session ordering is enforced by our handler goroutines anyway.
+	_ = rabbitmqChannel.Qos(50, 0, false)
+
+	merged := make(chan amqp.Delivery, 1000)
+	consumerTags := make([]string, 0, shardCount)
+
+	var forwardWg sync.WaitGroup
+	forwardWg.Add(shardCount)
+
+	podID := os.Getenv("POD_ID")
+	if podID == "" {
+		podID = "unknown"
 	}
 
-	return consumer, rabbitmqChannel, e.Nil()
+	for i := 0; i < shardCount; i++ {
+		q := fmtShardQueue(i)
+		tag := fmt.Sprintf("events-%s-%s", podID, q)
+		consumerTags = append(consumerTags, tag)
+
+		consumer, unwrappedError := rabbitmqChannel.Consume(
+			q,
+			tag,
+			false, // manual acks
+			false,
+			false,
+			false,
+			amqp.Table{},
+		)
+		if unwrappedError != nil {
+			_ = rabbitmqChannel.Close()
+			return nil, nil, nil, e.FromError(unwrappedError, "failed to init consumer").WithSeverity(e.Critical).WithData(map[string]any{"queue": q})
+		}
+
+		go func(c <-chan amqp.Delivery) {
+			defer forwardWg.Done()
+			for d := range c {
+				merged <- d
+			}
+		}(consumer)
+	}
+
+	go func() {
+		forwardWg.Wait()
+		close(merged)
+	}()
+
+	return merged, consumerTags, rabbitmqChannel, e.Nil()
 }
 
 type WorkerArgs struct {
@@ -58,10 +90,10 @@ type WorkerArgs struct {
 }
 
 func ListenToRabbitmq(cfg *config.Config, ctx context.Context, wg *sync.WaitGroup) *e.ErrorInfo {
-	gcfg = cfg // Чёрт, что я творю.........
 	var consumer <-chan amqp.Delivery
+	var consumerTags []string
 	var err *e.ErrorInfo
-	consumer, rabbitmqChannel, err = initRabbitmqQueue(cfg)
+	consumer, consumerTags, rabbitmqChannel, err = initRabbitmqQueue(cfg)
 	if !err.IsNil() {
 		return err
 	}
@@ -75,7 +107,9 @@ func ListenToRabbitmq(cfg *config.Config, ctx context.Context, wg *sync.WaitGrou
 	for {
 		select {
 		case <-ctx.Done():
-			rabbitmqChannel.Cancel("main-consumer", false)
+			for _, tag := range consumerTags {
+				_ = rabbitmqChannel.Cancel(tag, false)
+			}
 			for sessionId, ch := range gorutineEndpoints {
 				delete(gorutineEndpoints, sessionId)
 				close(ch)
@@ -112,13 +146,11 @@ func hanleError(src chan (*e.ErrorInfo), context context.Context, wg *sync.WaitG
 }
 
 func initNewHandlerOrPushToExisting(delivery amqp.Delivery, ctx context.Context, wg *sync.WaitGroup, cfg *config.Config) {
-	keyParams := strings.Split(delivery.RoutingKey, ".")
-	if len(keyParams) != 3 {
-		errors <- e.NewError("Inavlid routing key!", "")
+	sessionId, err := sessionIDFromHeaders(delivery.Headers)
+	if !err.IsNil() {
+		errors <- err.WithData(map[string]any{"rk": delivery.RoutingKey}).WithSeverity(e.Critical)
 		return
 	}
-
-	sessionId := keyParams[2]
 
 	if _, ok := gorutineEndpoints[sessionId]; ok {
 		gorutineEndpoints[sessionId] <- delivery
@@ -129,6 +161,34 @@ func initNewHandlerOrPushToExisting(delivery amqp.Delivery, ctx context.Context,
 	}
 
 	// close(delivery.Ack(false))
+}
+
+func sessionIDFromHeaders(h amqp.Table) (string, *e.ErrorInfo) {
+	if h == nil {
+		return "", e.NewError("missing headers", "delivery headers are nil")
+	}
+	v, ok := h["session_id"]
+	if !ok || v == nil {
+		return "", e.NewError("missing session_id", "delivery missing header session_id")
+	}
+	switch t := v.(type) {
+	case string:
+		if t == "" {
+			return "", e.NewError("empty session_id", "session_id header is empty")
+		}
+		return t, e.Nil()
+	case []byte:
+		if len(t) == 0 {
+			return "", e.NewError("empty session_id", "session_id header is empty")
+		}
+		return string(t), e.Nil()
+	default:
+		return "", e.NewError("invalid session_id header type", "session_id header has invalid type").WithData(map[string]any{"type": fmt.Sprintf("%T", v)})
+	}
+}
+
+func fmtShardQueue(i int) string {
+	return fmt.Sprintf("q%02d", i)
 }
 
 func initHandler(ctx context.Context, wg *sync.WaitGroup, cfg *config.Config, sessionId string) chan amqp.Delivery {
@@ -185,11 +245,6 @@ func handle(args WorkerArgs) {
 				errors <- e.FromError(unwrappedError, "Ошибка подтверждения получения")
 			}
 
-			err := DecreacePodLoad(gcfg)
-			if !err.IsNil() {
-				errors <- err.PushStack()
-			}
-
 			if !timer.Stop() {
 				select {
 				case <-timer.C:
@@ -210,7 +265,7 @@ var router Router = Router{
 				return handlerResponse{
 					Method: "text",
 					SendData: map[string]any{
-						"text": "Hello, world!",
+						"text":    "Hello, world!",
 						"chat_id": update.Message.Chat.ID,
 					},
 					SenderBot: "@main",
@@ -221,73 +276,4 @@ var router Router = Router{
 			Name:    "test",
 		},
 	},
-}
-
-func changePodList(script string, cfg *config.Config) *e.ErrorInfo {
-	redisScript := redigo.NewScript(1, script)
-
-	redisConnection, err := redis.NewRedisConnection(cfg)
-	if !err.IsNil() {
-		return err
-	}
-	defer redisConnection.Close()
-
-	key := fmt.Sprintf("pods:handlers:%s:load", cfg.RuntimeConfig.PodType)
-	_, unwrappedError := redisScript.Do(redisConnection, key, cfg.RuntimeConfig.PodID)
-	if unwrappedError != nil {
-		return e.FromError(unwrappedError, "Failed to execute script").WithSeverity(e.Critical)
-	}
-
-	return e.Nil()
-}
-
-func MakeAstatement(cfg *config.Config) *e.ErrorInfo {
-	err := changePodList(`
-		local key = KEYS[1]
-		local pod_id = ARGV[1]
-
-		return redis.call('ZADD', key, 0, pod_id)
-	`, cfg)
-
-	if !err.IsNil() {
-		return err.PushStack().WithData(map[string]any{"operation": "adding myself to pods zset"})
-	}
-
-	return e.Nil()
-}
-
-func DeleteMyselfFromRedis(cfg *config.Config) *e.ErrorInfo {
-	err := changePodList(`
-		local key = KEYS[1]
-		local pod_id = ARGV[1]
-
-		return redis.call('ZREM', key, pod_id)
-	`, cfg)
-
-	if !err.IsNil() {
-		return err.PushStack().WithData(map[string]any{"operation": "removing myself from pods zset"})
-	}
-
-	return e.Nil()
-}
-
-func DecreacePodLoad(cfg *config.Config) *e.ErrorInfo {
-	err := changePodList(`
-		local pod_id = ARGV[1]
-
-		local exists = redis.call("ZSCORE", KEYS[1], pod_id)
-
-		if exists then
-			redis.call("ZINCRBY", KEYS[1], -1, pod_id)
-			return pod_id
-		end
-
-		return nil
-	`, cfg)
-
-	if !err.IsNil() {
-		return err.PushStack().WithData(map[string]any{"operation": "decreacing my load"})
-	}
-
-	return e.Nil()
 }
