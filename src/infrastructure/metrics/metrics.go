@@ -18,14 +18,14 @@ var (
 
 	queueMessages = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "chatdetective_queue_updates_in_queue",
+			Name: "chatdetective_commands_h_queue_updates_in_queue",
 			Help: "Number of pending update messages in a shard queue (queried from RabbitMQ via passive declare).",
 		},
 		[]string{"queue"},
 	)
 	queueConsumers = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "chatdetective_queue_consumers",
+			Name: "chatdetective_commands_h_queue_consumers",
 			Help: "Number of consumers on a shard queue (queried from RabbitMQ via passive declare).",
 		},
 		[]string{"queue"},
