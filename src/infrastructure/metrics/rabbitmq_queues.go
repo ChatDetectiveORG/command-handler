@@ -35,7 +35,7 @@ func startRabbitMQQueueCollector(ctx context.Context, cfg *config.Config) {
 
 	collect := func() {
 		for i := 0; i < shardCount; i++ {
-			q := fmt.Sprintf("q%02d", i)
+			q := fmt.Sprintf("%s.q%02d", config.PodType, i)
 			info, err := passiveQueueInfo(ch, q)
 			if err != nil {
 				queueMessages.WithLabelValues(q).Set(-1)

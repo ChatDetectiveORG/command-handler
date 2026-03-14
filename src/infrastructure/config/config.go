@@ -7,6 +7,8 @@ import (
 	"github.com/spf13/viper"
 )
 
+const PodType = "commands"
+
 type Config struct {
 	RuntimeConfig  *RuntimeConfig
 	RabbitMQConfig *RabbitMQConfig
@@ -80,7 +82,7 @@ func FetchConfig() (*Config, *e.ErrorInfo) {
 		RuntimeConfig: &RuntimeConfig{
 			NumRoutingGorutines: viper.GetInt("NUM_ROUTING_GOROUTINES"),
 			PodID:               viper.GetString("POD_ID"),
-			PodType:             "commands",
+			PodType:             PodType,
 			HandlerLiveDuration: time.Minute * 10,
 		},
 	}

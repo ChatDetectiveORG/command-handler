@@ -188,7 +188,7 @@ func sessionIDFromHeaders(h amqp.Table) (string, *e.ErrorInfo) {
 }
 
 func fmtShardQueue(i int) string {
-	return fmt.Sprintf("q%02d", i)
+	return fmt.Sprintf("%s.q%02d", config.PodType, i)
 }
 
 func initHandler(ctx context.Context, wg *sync.WaitGroup, cfg *config.Config, sessionId string) chan amqp.Delivery {

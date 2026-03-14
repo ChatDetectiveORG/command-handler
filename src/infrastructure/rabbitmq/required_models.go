@@ -1,6 +1,7 @@
 package rabbitmq
 
 import (
+	"app/src/infrastructure/config"
 	"fmt"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -18,7 +19,7 @@ func buildRequiredModels() []Model {
 	models := []Model{
 		ExchangeModel{
 			Exchange:   "chatdetective.events",
-			Kind:       "direct",
+			Kind:       "topic",
 			Durable:    true,
 			AutoDelete: false,
 			Internal:   false,
@@ -37,7 +38,7 @@ func buildRequiredModels() []Model {
 	}
 
 	for i := 0; i < shardCount; i++ {
-		q := fmt.Sprintf("q%02d", i)
+		q := fmt.Sprintf("%s.q%02d", config.PodType, i)
 		models = append(models,
 			QueueModel{
 				Queue:      q,
