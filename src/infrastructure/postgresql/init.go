@@ -3,9 +3,9 @@ package postgresql
 import (
 	"os"
 	"sync"
+	e "github.com/ChatDetectiveORG/shared/errors"
 
-	e "app/pkg/errors"
-	requiredModels "app/src/infrastructure/postgresql/requiredModels"
+	// requiredModels "app/src/infrastructure/postgresql/requiredModels"
 
 	"github.com/go-pg/pg/v10"
 	"github.com/go-pg/pg/v10/orm"
@@ -33,7 +33,6 @@ func InitPostgresql() *e.ErrorInfo {
 	db := GetDB()
 
 	models := []interface{}{
-		(*requiredModels.LoasUpdates)(nil),
 	}
 
 	for _, model := range models {

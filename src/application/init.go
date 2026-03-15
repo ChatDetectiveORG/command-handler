@@ -1,7 +1,8 @@
 package application
 
 import (
-	e "app/pkg/errors"
+	e "github.com/ChatDetectiveORG/shared/errors"
+	h "github.com/ChatDetectiveORG/shared/handlers"
 	"app/src/infrastructure/config"
 	"app/src/infrastructure/rabbitmq"
 	"context"
@@ -256,24 +257,8 @@ func handle(args WorkerArgs) {
 	}
 }
 
-var router Router = Router{
+var router h.Router = h.Router{
 	ErrorChannel:    errors,
 	RabbitmqChannel: rabbitmqChannel,
-	Endpoints: []Endpoint{
-		{
-			handler: func(update tele.Update, timeout time.Duration) (handlerResponse, *e.ErrorInfo) {
-				return handlerResponse{
-					Method: "text",
-					SendData: map[string]any{
-						"text":    "Hello, world!",
-						"chat_id": update.Message.Chat.ID,
-					},
-					SenderBot: "@main",
-				}, e.Nil()
-			},
-			filter:  Or(Command([]string{"test", "start"}), TextCommand("test text command")),
-			timeout: time.Second * 10,
-			Name:    "test",
-		},
-	},
+	Endpoints: []h.Endpoint{},
 }
