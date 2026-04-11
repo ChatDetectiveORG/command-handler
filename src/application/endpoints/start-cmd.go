@@ -1,11 +1,13 @@
 package endpoints
 
 import (
+	"app/src/infrastructure/postgresql"
 	"context"
 	"time"
 
 	e "github.com/ChatDetectiveORG/shared/errors"
 	h "github.com/ChatDetectiveORG/shared/handlers"
+	models "github.com/ChatDetectiveORG/shared/postgresModels"
 	tele "gopkg.in/telebot.v4"
 )
 
@@ -24,7 +26,24 @@ func StartCommand() h.Endpoint {
 }
 
 func greet(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
-	err := hashe.Emit("telegram.message.send", &tele.Message{
+	tx, eraw := postgresql.GetDB().Begin()
+	if e.IsNonNil(eraw) {
+		return e.FromError(eraw, "failed to begin transaction")
+	}
+	err := (&models.Telegramuser{}).GetOrCreate(tx, update.Message.Sender)
+	if e.IsNonNil(err) {
+		return e.FromError(err, "failed to get or create telegram user")
+	}
+	eraw = tx.Commit()
+	if e.IsNonNil(eraw) {
+		return e.FromError(eraw, "failed to commit transaction")
+	}
+	eraw = tx.Close()
+	if e.IsNonNil(eraw) {
+		return e.FromError(eraw, "failed to close transaction")
+	}
+
+	err = hashe.Emit("telegram.message.send", &tele.Message{
 		Chat: &tele.Chat{
 			ID: update.Message.Chat.ID,
 		},
