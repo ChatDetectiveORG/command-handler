@@ -50,6 +50,18 @@ const (
 	HowEncryptionPhotoFileID    = "AgACAgIAAxkBAAIDnGnt0Oy1tmWtyTde2cxaoiy81zZyAALXFmsbBz9pS9gHPaDlZK_FAQADAgADeQADOwQ"
 )
 
+// Local static media paths used for mirror bots because Telegram file_id is bot-specific.
+const (
+	InstallationAnimationStaticPath = "static/setupInstruction.gif"
+	HowEncryptionPhotoStaticPath    = "static/cipherExample.png"
+)
+
+// Stable keys for bot-specific cached Telegram file IDs.
+const (
+	MirrorFileInstallationAnimation = "installation_animation"
+	MirrorFileHowEncryptionPhoto    = "how_encryption_photo"
+)
+
 // ReferralBonusRub is the cash bonus amount per referred user, in rubles.
 const ReferralBonusRub = 100
 

@@ -13,6 +13,7 @@ import (
 	"github.com/ChatDetectiveORG/command-handler/src/application/endpoints/help"
 	howencryption "github.com/ChatDetectiveORG/command-handler/src/application/endpoints/howEncryption"
 	"github.com/ChatDetectiveORG/command-handler/src/application/endpoints/installation"
+	"github.com/ChatDetectiveORG/command-handler/src/application/endpoints/mirror"
 	"github.com/ChatDetectiveORG/command-handler/src/application/endpoints/referral"
 	"github.com/ChatDetectiveORG/command-handler/src/application/endpoints/settings"
 	"github.com/ChatDetectiveORG/command-handler/src/application/endpoints/start"
@@ -178,6 +179,10 @@ var router h.Router = h.Router{
 
 		// Check connection
 		checkconnection.NewCheckConnectionEndpoint(),
+
+		// Mirror creation
+		mirror.NewCreateMirrorEndpoint(),
+		mirror.NewMirrorTokenEndpoint(),
 
 		// Referral program + all sub-callbacks
 		referral.NewReferralEndpoint(),

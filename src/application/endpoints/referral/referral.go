@@ -498,6 +498,7 @@ func parseUpgradeLevels(text string) (int, *e.ErrorInfo) {
 func emitLevelInvoice(tgUserID int64, chatID int64, levels int, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 	paymentType := paymentservice.PaymentTypeLevelUp
 	err, _ := paymentservice.EmitPayment(&paymentType, &paymentservice.PaymentOpts{
+		MirrorID: hashe.MirrorID(),
 		Recipient: &paymentservice.PaymentRecipientOpts{
 			TelegramUserID: tgUserID,
 			ChatID:         chatID,
