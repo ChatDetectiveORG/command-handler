@@ -1,18 +1,18 @@
 package main
 
 import (
-	"app/src/application"
-	"app/src/infrastructure/config"
-	"app/src/infrastructure/metrics"
-	"app/src/infrastructure/postgresql"
+	"github.com/ChatDetectiveORG/command-handler/src/application"
+	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/config"
+	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/metrics"
+	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/postgresql"
 	"context"
 	"os/signal"
 	"sync"
 	"syscall"
 	"time"
 
-	// "app/src/infrastructure/postgresql"
-	"app/src/infrastructure/rabbitmq"
+	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/rabbitmq"
+	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/redis"
 	"log"
 )
 
@@ -29,6 +29,12 @@ func main() {
 	if !err.IsNil() {
 		log.Fatal(err.JSON())
 	}
+
+	err = redis.InitRedis(config)
+	if !err.IsNil() {
+		log.Fatal(err.JSON())
+	}
+	log.Println("Redis initialized")
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

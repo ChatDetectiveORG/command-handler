@@ -4,7 +4,7 @@ import (
 	"time"
 
 	e "github.com/ChatDetectiveORG/shared/errors"
-	"app/src/infrastructure/config"
+	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/config"
 
 	"github.com/gomodule/redigo/redis"
 )

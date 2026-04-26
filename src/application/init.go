@@ -1,14 +1,23 @@
 package application
 
 import (
-	"app/src/application/endpoints"
-	"app/src/infrastructure/config"
-	"app/src/infrastructure/rabbitmq"
 	"context"
 	"fmt"
 	"log"
 	"os"
 	"sync"
+
+	businessconnection "github.com/ChatDetectiveORG/command-handler/src/application/endpoints/businessConnection"
+	checkconnection "github.com/ChatDetectiveORG/command-handler/src/application/endpoints/checkConnection"
+	deletedata "github.com/ChatDetectiveORG/command-handler/src/application/endpoints/deleteData"
+	"github.com/ChatDetectiveORG/command-handler/src/application/endpoints/help"
+	howencryption "github.com/ChatDetectiveORG/command-handler/src/application/endpoints/howEncryption"
+	"github.com/ChatDetectiveORG/command-handler/src/application/endpoints/installation"
+	"github.com/ChatDetectiveORG/command-handler/src/application/endpoints/referral"
+	"github.com/ChatDetectiveORG/command-handler/src/application/endpoints/settings"
+	"github.com/ChatDetectiveORG/command-handler/src/application/endpoints/start"
+	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/config"
+	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/rabbitmq"
 
 	e "github.com/ChatDetectiveORG/shared/errors"
 	h "github.com/ChatDetectiveORG/shared/handlers"
@@ -29,7 +38,6 @@ func initRabbitmqQueue(cfg *config.Config) (<-chan amqp.Delivery, []string, *amq
 		return nil, nil, nil, err
 	}
 
-	// Reasonable default; per-session ordering is enforced by our handler goroutines anyway.
 	_ = rabbitmqChannel.Qos(50, 0, false)
 
 	merged := make(chan amqp.Delivery, 1000)
@@ -51,7 +59,7 @@ func initRabbitmqQueue(cfg *config.Config) (<-chan amqp.Delivery, []string, *amq
 		consumer, unwrappedError := rabbitmqChannel.Consume(
 			q,
 			tag,
-			false, // manual acks
+			false,
 			false,
 			false,
 			false,
@@ -86,12 +94,9 @@ func ListenToRabbitmq(cfg *config.Config, ctx context.Context, wg *sync.WaitGrou
 	if !err.IsNil() {
 		return err
 	}
-	// router is a package-level singleton and was initialized before rabbitmqChannel was set.
-	// Update it to use the live channel to avoid nil deref in PublishWithContext.
 	router.RabbitmqChannel = rabbitmqChannel
 	router.ReplicaCount = cfg.RuntimeConfig.NumRoutingGorutines
 	if router.ReplicaCount <= 0 {
-		// Keep sharding active even if env var is missing.
 		router.ReplicaCount = shardCount
 	}
 	podID := cfg.RuntimeConfig.PodID
@@ -112,7 +117,6 @@ func ListenToRabbitmq(cfg *config.Config, ctx context.Context, wg *sync.WaitGrou
 			return e.Nil()
 		case delivery, ok := <-consumer:
 			if !ok {
-				// consumer channel closed
 				return e.FromError(nil, "RabbitMQ consumer channel closed").WithSeverity(e.Critical)
 			}
 			log.Printf("trace=%s received rk=%s", delivery.CorrelationId, delivery.RoutingKey)
@@ -148,11 +152,50 @@ func fmtShardQueue(i int) string {
 	return fmt.Sprintf("%s.q%02d", config.PodType, i)
 }
 
-
 var router h.Router = h.Router{
 	ErrorChannel:    errors,
 	RabbitmqChannel: rabbitmqChannel,
 	Endpoints: []h.Endpoint{
-		endpoints.StartCommand(),
+		// /start command and show-contacts callback
+		start.NewStartEndpoint(),
+		start.NewShowContactsEndpoint(),
+
+		// Installation guide
+		installation.NewInstallationEndpoint(),
+
+		// Settings page + toggle callbacks
+		settings.NewSettingsEndpoint(),
+		settings.NewToggleDeletedEndpoint(),
+		settings.NewToggleEditedEndpoint(),
+		settings.NewToggleSelfMediaEndpoint(),
+		settings.NewToggleExtExportEndpoint(),
+
+		// Help command
+		help.NewHelpEndpoint(),
+
+		// Business connection connect/disconnect
+		businessconnection.NewBusinessConnectionEndpoint(),
+
+		// Check connection
+		checkconnection.NewCheckConnectionEndpoint(),
+
+		// Referral program + all sub-callbacks
+		referral.NewReferralEndpoint(),
+		referral.NewBonusSelectEndpoint(),
+		referral.NewBonusDetailsEndpoint(),
+		referral.NewBonusBackEndpoint(),
+		referral.NewBonusMoneyEndpoint(),
+		referral.NewBonusDiscountEndpoint(),
+		referral.NewBonusLevelsEndpoint(),
+		referral.NewWhatLevelsEndpoint(),
+		referral.NewUpgradeLevelEndpoint(),
+
+		// How encryption works
+		howencryption.NewHowEncryptionEndpoint(),
+
+		// Delete data command + confirm/cancel callbacks
+		deletedata.NewDeleteDataEndpoint(),
+		deletedata.NewDeleteConfirmEndpoint(),
+		deletedata.NewDeleteCancelEndpoint(),
 	},
 }

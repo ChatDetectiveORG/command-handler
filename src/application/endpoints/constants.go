@@ -1,0 +1,60 @@
+package endpoints
+
+// Reply-keyboard button texts. Used both as display labels and filter strings.
+const (
+	BtnInstallGuide    = "Инструкция по установке"
+	BtnCheckConnection = "проверить подключение"
+	BtnSettings        = "Настройки"
+	BtnInviteFriend    = "Пригласить друга"
+	BtnUpgradeLevel    = "Поднять уровень"
+	BtnHowEncryption   = "Как работает шифрование"
+)
+
+// Inline callback unique names used for routing.
+const (
+	UniqueShowContacts    = "show_contacts"
+	UniqueToggleDeleted   = "toggle_deleted"
+	UniqueToggleEdited    = "toggle_edited"
+	UniqueToggleSelfMedia = "toggle_self_media"
+	UniqueToggleExtExport = "toggle_ext_export"
+	UniqueBonusSelect     = "bonus_select"
+	UniqueBonusDetails    = "bonus_details"
+	UniqueBonusBack       = "bonus_back"
+	UniqueBonusMoney      = "bonus_money"
+	UniqueBonusDiscount   = "bonus_discount"
+	UniqueBonusLevels     = "bonus_levels"
+	UniqueWhatLevels      = "what_levels"
+	UniqueUpgradeLevel    = "upgrade_level"
+	UniqueDeleteConfirm   = "delete_confirm"
+	UniqueDeleteCancel    = "delete_cancel"
+)
+
+// Custom emoji Sticker IDs for inline button state indicators.
+const (
+	// EmojiSettingOn is the "enabled" state indicator (BMP, 1 UTF-16 unit).
+	EmojiSettingOn = "5411197345968701560"
+	// EmojiSettingOff is the "disabled" state indicator (non-BMP surrogate pair, 2 UTF-16 units).
+	EmojiSettingOff = "6323476982646441555"
+)
+
+// Optional Unicode fallbacks (e.g. if text_entities are used). Settings/referral inline keys use
+// icon_custom_emoji_id before text instead; keep these for any legacy or manual use.
+const (
+	PlaceholderOn  = "✅"
+	PlaceholderOff = "🔘"
+)
+
+// Telegram file IDs for static media assets.
+const (
+	InstallationAnimationFileID = "CgACAgIAAxkBAAIDjWnsbpjwU4FC2qaf-ddh4Spf5MqmAAKQdgACRDmhSdbGAStskkqKOwQ"
+	HowEncryptionPhotoFileID    = "AgACAgIAAxkBAAIDnGnt0Oy1tmWtyTde2cxaoiy81zZyAALXFmsbBz9pS9gHPaDlZK_FAQADAgADeQADOwQ"
+)
+
+// ReferralBonusRub is the cash bonus amount per referred user, in rubles.
+const ReferralBonusRub = 100
+
+// BotUsername is shown in several messages as a mention.
+const BotUsername = "@MajorFanOfInnokentii_bot"
+
+// Routing key for all outgoing Telegram messages via AMQP.
+const OutgoingRoutingKey = "telegram.message.send"

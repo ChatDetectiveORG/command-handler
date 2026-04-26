@@ -1,11 +1,10 @@
-module app
+module github.com/ChatDetectiveORG/command-handler
 
 go 1.23.3
 
-// replace github.com/ChatDetectiveORG/shared => ../shared
 
 require (
-	github.com/ChatDetectiveORG/shared v0.1.24
+	github.com/ChatDetectiveORG/shared v0.1.30
 	github.com/go-pg/pg/v10 v10.15.0
 	github.com/gomodule/redigo v1.9.3
 	github.com/prometheus/client_golang v1.23.2
@@ -46,3 +45,5 @@ require (
 	google.golang.org/protobuf v1.36.8 // indirect
 	mellium.im/sasl v0.3.1 // indirect
 )
+
+replace gopkg.in/telebot.v4 => ../forks/telebot

@@ -1,8 +1,8 @@
 package metrics
 
 import (
-	"app/src/infrastructure/config"
-	"app/src/infrastructure/rabbitmq"
+	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/config"
+	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/rabbitmq"
 	"context"
 	"fmt"
 	"log"
