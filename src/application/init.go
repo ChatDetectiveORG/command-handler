@@ -189,6 +189,8 @@ var router h.Router = h.Router{
 		referral.NewBonusLevelsEndpoint(),
 		referral.NewWhatLevelsEndpoint(),
 		referral.NewUpgradeLevelEndpoint(),
+		referral.NewUpgradeLevelCommandEndpoint(),
+		referral.NewLevelCommandEndpoint(),
 
 		// How encryption works
 		howencryption.NewHowEncryptionEndpoint(),

@@ -41,6 +41,7 @@ func InitPostgresql() *e.ErrorInfo {
 		(*models.UserRelations)(nil),
 		(*models.UserLevels)(nil),
 		(*models.Admin)(nil),
+		(*models.Payment)(nil),
 		(*models.Message)(nil),
 		(*models.MessageVersion)(nil),
 	}

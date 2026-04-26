@@ -4,6 +4,7 @@ go 1.23.3
 
 
 require (
+	github.com/ChatDetectiveORG/payment-service v0.0.0
 	github.com/ChatDetectiveORG/shared v0.1.30
 	github.com/go-pg/pg/v10 v10.15.0
 	github.com/gomodule/redigo v1.9.3
@@ -46,4 +47,8 @@ require (
 	mellium.im/sasl v0.3.1 // indirect
 )
 
-replace gopkg.in/telebot.v4 => ../forks/telebot
+replace (
+	github.com/ChatDetectiveORG/payment-service => ../payment-service
+	github.com/ChatDetectiveORG/shared => ../shared
+	gopkg.in/telebot.v4 => ../forks/telebot
+)

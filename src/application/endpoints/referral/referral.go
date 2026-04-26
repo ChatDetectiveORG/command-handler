@@ -2,10 +2,13 @@ package referral
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	shared "github.com/ChatDetectiveORG/command-handler/src/application/endpoints"
 	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/postgresql"
+	paymentservice "github.com/ChatDetectiveORG/payment-service"
 	e "github.com/ChatDetectiveORG/shared/errors"
 	h "github.com/ChatDetectiveORG/shared/handlers"
 	models "github.com/ChatDetectiveORG/shared/postgresModels"
@@ -111,10 +114,39 @@ func NewUpgradeLevelEndpoint() h.Endpoint {
 	ep.Init(
 		"upgrade_level",
 		*h.HandlerChain{}.Init(
-			30*time.Second,
+			3*time.Minute,
 			h.InitChainHandler(runUpgradeLevel, h.EndOnError),
 		),
 		h.UniqueCallback(shared.UniqueUpgradeLevel),
+	)
+	return ep
+}
+
+func NewUpgradeLevelCommandEndpoint() h.Endpoint {
+	ep := h.Endpoint{}
+	ep.Init(
+		"upgrade_level_command",
+		*h.HandlerChain{}.Init(
+			3*time.Minute,
+			h.InitChainHandler(runUpgradeLevelCommand, h.EndOnError),
+		),
+		h.Or(
+			h.Command([]string{"upgrade"}),
+			h.TextCommand(shared.BtnUpgradeLevel),
+		),
+	)
+	return ep
+}
+
+func NewLevelCommandEndpoint() h.Endpoint {
+	ep := h.Endpoint{}
+	ep.Init(
+		"level_command",
+		*h.HandlerChain{}.Init(
+			30*time.Second,
+			h.InitChainHandler(runLevelCommand, h.EndOnError),
+		),
+		h.Command([]string{"level"}),
 	)
 	return ep
 }
@@ -220,11 +252,25 @@ func buildDetailsMessage(chatID, msgID int64) *tele.Message {
 	}
 }
 
-func buildWhatLevelsMessage(userLevel int, chatID int64) *tele.Message {
+func buildWhatLevelsMessage(level models.LevelSummary, isAdmin bool, chatID int64) *tele.Message {
 	botMentionLen := utils.TgLen("@ChatDetectiveBot")
+	nextDecreaseText := "Ближайшего уменьшения нет"
+	if level.NearestDecreaseAt > 0 {
+		nextDecreaseText = fmt.Sprintf(
+			"Ближайшее уменьшение: -%d уровня(ей) %s",
+			level.NearestDecreaseAmount,
+			time.Unix(level.NearestDecreaseAt, 0).Format("02.01.2006 15:04"),
+		)
+	}
+	adminText := ""
+	if isAdmin {
+		adminText = "\nВы администратор: ваш приоритет выше любого обычного пользователя."
+	}
 	text := fmt.Sprintf(
-		"УРОВНИ⬆️\n\n🦨Если ваш уровень выше уровня собеседника, только  вы будете получать уведомления о его действиях в переписке через @ChatDetectiveBot.\n\n🦨Если ваш уровень такой же, как у собеседника, то и вы, и собеседник будете получать уведомления о действиях противоположной стороны в переписке через @ChatDetectiveBot.\n\n🦨Если ваш уровень ниже уровня собеседника, то только ваш собеседник будет получать обновления о ваших действиях в переписке через @ChatDetectiveBot.\n\nВаш уровень сейчас: %d",
-		userLevel,
+		"УРОВНИ⬆️\n\n🦨Если ваш уровень выше уровня собеседника, только  вы будете получать уведомления о его действиях в переписке через @ChatDetectiveBot.\n\n🦨Если ваш уровень такой же, как у собеседника, то и вы, и собеседник будете получать уведомления о действиях противоположной стороны в переписке через @ChatDetectiveBot.\n\n🦨Если ваш уровень ниже уровня собеседника, то только ваш собеседник будет получать обновления о ваших действиях в переписке через @ChatDetectiveBot.\n\nВаш уровень сейчас: %d\n%s%s",
+		level.Level,
+		nextDecreaseText,
+		adminText,
 	)
 
 	mention1Offset := utils.TgLen("УРОВНИ⬆️\n\n🦨Если ваш уровень выше уровня собеседника, только  вы будете получать уведомления о его действиях в переписке через ")
@@ -255,6 +301,31 @@ func buildWhatLevelsMessage(userLevel int, chatID int64) *tele.Message {
 		ReplyMarkup: &tele.ReplyMarkup{
 			InlineKeyboard: [][]tele.InlineButton{
 				{{Text: "Повысить уровень", Data: shared.UniqueUpgradeLevel}},
+			},
+		},
+	}
+}
+
+func buildLevelCommandMessage(level models.LevelSummary, chatID int64) *tele.Message {
+	nextDecreaseText := "Ближайшего уменьшения нет"
+	if level.NearestDecreaseAt > 0 {
+		nextDecreaseText = fmt.Sprintf(
+			"Дата ближайшего уменьшения: %s\nРазмер ближайшего уменьшения: -%d уровня(ей)",
+			time.Unix(level.NearestDecreaseAt, 0).Format("02.01.2006 15:04"),
+			level.NearestDecreaseAmount,
+		)
+	}
+
+	return &tele.Message{
+		Chat: &tele.Chat{ID: chatID},
+		Text: fmt.Sprintf(
+			"Текущий суммарный уровень: %d\n%s",
+			level.Level,
+			nextDecreaseText,
+		),
+		ReplyMarkup: &tele.ReplyMarkup{
+			InlineKeyboard: [][]tele.InlineButton{
+				{{Text: "Об уровнях", Data: shared.UniqueWhatLevels}},
 			},
 		},
 	}
@@ -352,13 +423,21 @@ func makeBonusTypeHandler(bonusType string) func(tele.Update, *h.HandlerChainHas
 
 func runWhatLevels(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 	db := postgresql.GetDB()
-	_, err := shared.GetUserByTgID(db, update.Callback.Sender.ID)
+	user, err := shared.GetUserByTgID(db, update.Callback.Sender.ID)
 	if e.IsNonNil(err) {
 		return err
 	}
 
-	// Level system not implemented yet; show level 0.
-	msg := buildWhatLevelsMessage(0, update.Callback.Message.Chat.ID)
+	level, err := models.GetUserLevelSummary(db, user.ID, time.Now())
+	if e.IsNonNil(err) {
+		return err
+	}
+	isAdmin, err := models.IsUserAdmin(db, user.ID)
+	if e.IsNonNil(err) {
+		return err
+	}
+
+	msg := buildWhatLevelsMessage(level, isAdmin, update.Callback.Message.Chat.ID)
 	if err := hashe.Emit(shared.OutgoingRoutingKey, msg); e.IsNonNil(err) {
 		return err
 	}
@@ -366,9 +445,86 @@ func runWhatLevels(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo 
 }
 
 func runUpgradeLevel(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
-	return hashe.EmitCallback(
+	if err := hashe.EmitCallback(
 		shared.OutgoingRoutingKey,
 		update.Callback,
-		shared.AnswerCallbackBanner("Типа оплата", update.Callback),
-	)
+		shared.AnswerCallbackBanner("Отправляю счёт", update.Callback),
+	); e.IsNonNil(err) {
+		return err
+	}
+
+	return emitLevelInvoice(update.Callback.Sender.ID, update.Callback.Message.Chat.ID, 1, hashe)
+}
+
+func runUpgradeLevelCommand(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
+	levels := 1
+	if strings.HasPrefix(update.Message.Text, "/upgrade") {
+		parsedLevels, err := parseUpgradeLevels(update.Message.Text)
+		if e.IsNonNil(err) {
+			return hashe.Emit(shared.OutgoingRoutingKey, buildUpgradeUsageMessage(update.Message.Chat.ID))
+		}
+		levels = parsedLevels
+	}
+	return emitLevelInvoice(update.Message.Sender.ID, update.Message.Chat.ID, levels, hashe)
+}
+
+func runLevelCommand(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
+	db := postgresql.GetDB()
+	user, err := shared.GetUserByTgID(db, update.Message.Sender.ID)
+	if e.IsNonNil(err) {
+		return err
+	}
+
+	level, err := models.GetUserLevelSummary(db, user.ID, time.Now())
+	if e.IsNonNil(err) {
+		return err
+	}
+
+	return hashe.Emit(shared.OutgoingRoutingKey, buildLevelCommandMessage(level, update.Message.Chat.ID))
+}
+
+func parseUpgradeLevels(text string) (int, *e.ErrorInfo) {
+	parts := strings.Fields(text)
+	if len(parts) != 2 {
+		return 0, e.NewError("invalid upgrade command args", "failed to parse upgrade command").WithSeverity(e.Notice)
+	}
+	levels, err := strconv.Atoi(parts[1])
+	if err != nil || levels <= 0 {
+		return 0, e.NewError("levels must be positive", "failed to parse upgrade command").WithSeverity(e.Notice)
+	}
+	return levels, e.Nil()
+}
+
+func emitLevelInvoice(tgUserID int64, chatID int64, levels int, hashe *h.HandlerChainHashe) *e.ErrorInfo {
+	paymentType := paymentservice.PaymentTypeLevelUp
+	err, _ := paymentservice.EmitPayment(&paymentType, &paymentservice.PaymentOpts{
+		Recipient: &paymentservice.PaymentRecipientOpts{
+			TelegramUserID: tgUserID,
+			ChatID:         chatID,
+		},
+		Invoice: &paymentservice.PaymentInvoiceOpts{
+			Title:       "Повышение уровня",
+			Description: fmt.Sprintf("Покупка %d уровня(ей) на месяц", levels),
+			PriceLabel:  fmt.Sprintf("%d уровня(ей)", levels),
+		},
+		LevelUp: &paymentservice.LevelUpOpts{Levels: levels},
+	})
+	if e.IsNonNil(err) {
+		return err
+	}
+	return hashe.Emit(shared.OutgoingRoutingKey, buildUpgradeInvoiceSentMessage(chatID, levels))
+}
+
+func buildUpgradeUsageMessage(chatID int64) *tele.Message {
+	return &tele.Message{
+		Chat: &tele.Chat{ID: chatID},
+		Text: "Используйте команду в формате: /upgrade 3",
+	}
+}
+
+func buildUpgradeInvoiceSentMessage(chatID int64, levels int) *tele.Message {
+	return &tele.Message{
+		Chat: &tele.Chat{ID: chatID},
+		Text: fmt.Sprintf("Счёт на +%d уровня(ей) отправлен. Уровни начислятся после оплаты.", levels),
+	}
 }
