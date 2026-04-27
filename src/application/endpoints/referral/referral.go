@@ -159,7 +159,6 @@ func buildReferralMessage(user *models.Telegramuser, chatID int64) *tele.Message
 	handshakeOffset := refLinkOffset + refLinkLen
 	bonusText := fmt.Sprintf("%d рублей за друга", shared.ReferralBonusRub)
 	bonusEmojiOffset := refLinkOffset + refLinkLen + utils.TgLen(" 🤝\nЗа приглашённых друзей ты можешь получить бонус:\n")
-	// Prefix before 👑 must match the text byte-for-byte: ...друга🛍\nили\n... (not друга\nили).
 	crownOffset := refLinkOffset + refLinkLen + utils.TgLen(" 🤝\nЗа приглашённых друзей ты можешь получить бонус:\n"+bonusText+"🛍\nили\nРазличные бонусы в системе (скидки/бесплатные услуги на выбор)")
 
 	text := fmt.Sprintf("Твоя личная реферальная ссылка: %s 🤝\nЗа приглашённых друзей ты можешь получить бонус:\n%d рублей за друга🛍\nили\nРазличные бонусы в системе (скидки/бесплатные услуги на выбор)👑",

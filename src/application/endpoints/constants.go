@@ -19,6 +19,14 @@ const (
 	UniqueToggleExtExport = "toggle_ext_export"
 	UniqueBonusSelect     = "bonus_select"
 	UniqueBonusDetails    = "bonus_details"
+	
+	UniqueMirrorList      = "mirror_list"
+	UniqueMirrorDetails   = "mirror_details"
+	UniqueMirrorDelete    = "mirror_delete"
+	UniqueMirrorDeleteConfirm = "mirror_delete_confirm"
+	UniqueMirrorDeleteCancel = "mirror_delete_cancel"
+	UniqueMirrorCreate    = "mirror_create"
+
 	UniqueBonusBack       = "bonus_back"
 	UniqueBonusMoney      = "bonus_money"
 	UniqueBonusDiscount   = "bonus_discount"
@@ -35,13 +43,12 @@ const (
 	EmojiSettingOn = "5411197345968701560"
 	// EmojiSettingOff is the "disabled" state indicator (non-BMP surrogate pair, 2 UTF-16 units).
 	EmojiSettingOff = "6323476982646441555"
-)
 
-// Optional Unicode fallbacks (e.g. if text_entities are used). Settings/referral inline keys use
-// icon_custom_emoji_id before text instead; keep these for any legacy or manual use.
-const (
-	PlaceholderOn  = "✅"
-	PlaceholderOff = "🔘"
+	// EmojiMirrorActive is the "active" state indicator (BMP, 1 UTF-16 unit).
+	EmojiMirrorActive = "6237651574588445185"
+
+	// EmojiMirrorInactive is the "inactive" state indicator (non-BMP surrogate pair, 2 UTF-16 units).
+	EmojiMirrorInactive = "6269142369291995999"
 )
 
 // Telegram file IDs for static media assets.
@@ -63,7 +70,7 @@ const (
 )
 
 // ReferralBonusRub is the cash bonus amount per referred user, in rubles.
-const ReferralBonusRub = 100
+const ReferralBonusRub = 5
 
 // BotUsername is shown in several messages as a mention.
 const BotUsername = "@MajorFanOfInnokentii_bot"

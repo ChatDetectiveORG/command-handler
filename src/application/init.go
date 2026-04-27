@@ -183,6 +183,9 @@ var router h.Router = h.Router{
 		// Mirror creation
 		mirror.NewCreateMirrorEndpoint(),
 		mirror.NewMirrorTokenEndpoint(),
+		mirror.NewMirrorListEndpoint(),
+		mirror.NewMirrorInfoEndpoint(),
+		mirror.NewMirrorDeleteEndpoint(),
 
 		// Referral program + all sub-callbacks
 		referral.NewReferralEndpoint(),

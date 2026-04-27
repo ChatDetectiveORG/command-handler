@@ -106,7 +106,7 @@ func buildRelationDisconnectedMessage(disconnectedUser *models.Telegramuser, cha
 	botMentionOffset := nameLen + utils.TgLen(" отключил ")
 	botMentionLen := utils.TgLen(shared.BotUsername)
 	emojiOffset := botMentionOffset + botMentionLen
-	secondMentionOffset := utils.TgLen(fullName+" отключил "+shared.BotUsername+"!🙈\n\nТеперь большая часть функций в чате с ним недоступна. Бот будет работать только в тех чатах, где собеседник использует ")
+	secondMentionOffset := utils.TgLen(fullName + " отключил " + shared.BotUsername + "!🙈\n\nТеперь большая часть функций в чате с ним недоступна. Бот будет работать только в тех чатах, где собеседник использует ")
 
 	text := fullName + " отключил " + shared.BotUsername + "!🙈\n\nТеперь большая часть функций в чате с ним недоступна. Бот будет работать только в тех чатах, где собеседник использует " + shared.BotUsername
 

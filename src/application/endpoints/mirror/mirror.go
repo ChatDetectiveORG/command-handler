@@ -1,8 +1,8 @@
 package mirror
 
 import (
-	"context"
 	"fmt"
+	"log"
 	"os"
 	"regexp"
 	"strconv"
@@ -61,9 +61,18 @@ func runCreateMirror(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInf
 	if err := setWaitingForToken(update.Message.Chat.ID); e.IsNonNil(err) {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-	_, err := hashe.EmitMessageUserAnswer(ctx, shared.OutgoingRoutingKey, buildInstructionMessage(update.Message))
+	
+	log.Printf("update.Message.Sender.IsPremium: %v", update.Message.Sender.IsPremium)
+	if update.Message.Sender.IsPremium == true {
+		return hashe.Emit(shared.OutgoingRoutingKey, buildInstructionMessage(update.Message))
+	}
+
+	err := hashe.Emit(shared.OutgoingRoutingKey, buildInstructionMessage(update.Message))
+	if e.IsNonNil(err) {
+		return err
+	}
+
+	err = hashe.Emit(shared.OutgoingRoutingKey, buildNonPremiumUserWarningMessage(update.Message.Chat.ID))
 	return err
 }
 
@@ -124,12 +133,9 @@ func createMirrorFromToken(update tele.Update, hashe *h.HandlerChainHashe, token
 	if activeCount >= mirrorFreeLimit() {
 		status = models.MirrorStatusPending
 	}
-	mirror, err := models.NewMirror(owner, token, bot.Me.ID, bot.Me.Username, unique, status, now)
+	mirror, err := models.NewMirror(db, owner, token, bot.Me.ID, bot.Me.Username, unique, status, now)
 	if e.IsNonNil(err) {
 		return err
-	}
-	if _, rawErr := db.Model(mirror).Insert(); rawErr != nil {
-		return e.FromError(rawErr, "failed to create mirror").WithSeverity(e.Notice)
 	}
 
 	if status == models.MirrorStatusPending {
@@ -138,7 +144,16 @@ func createMirrorFromToken(update tele.Update, hashe *h.HandlerChainHashe, token
 	if err := setMirrorWebhook(bot, unique); e.IsNonNil(err) {
 		return err
 	}
-	return hashe.Emit(shared.OutgoingRoutingKey, buildSuccessMessage(update.Message.Chat.ID, bot.Me.Username))
+	err = hashe.Emit(shared.OutgoingRoutingKey, buildSuccessMessage(update.Message.Chat.ID, bot.Me.Username))
+	if e.IsNonNil(err) {
+		return err
+	}
+
+	if update.Message.Sender.IsPremium == false {
+		return hashe.Emit(shared.OutgoingRoutingKey, buildNonPremiumUserWarningMessage(update.Message.Chat.ID))
+	}
+
+	return e.Nil()
 }
 
 func emitMirrorPayment(update tele.Update, hashe *h.HandlerChainHashe, mirrorID int) *e.ErrorInfo {
@@ -224,6 +239,16 @@ func buildInstructionMessage(replyTo *tele.Message) *tele.Message {
 			{Offset: 622, Length: 15, Type: tele.EntityBold},
 			{Offset: 659, Length: 10, Type: tele.EntityMention},
 			{Offset: 757, Length: 10, Type: tele.EntityPhone},
+		},
+	}
+}
+
+func buildNonPremiumUserWarningMessage(chatID int64) *tele.Message {
+	return &tele.Message{
+		Chat: &tele.Chat{ID: chatID},
+		Text: "☝️Без подписки Telegram Premium бот может работать не совсем корректно из-за невозможности отобразить premium emoji",
+		Entities: tele.Entities{
+			{Type: tele.EntityCustomEmoji, Offset: 0, Length: 2, CustomEmojiID: "5395358455768837479"},
 		},
 	}
 }
