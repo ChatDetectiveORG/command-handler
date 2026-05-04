@@ -193,7 +193,6 @@ var router h.Router = h.Router{
 		referral.NewBonusDetailsEndpoint(),
 		referral.NewBonusBackEndpoint(),
 		referral.NewBonusMoneyEndpoint(),
-		referral.NewBonusDiscountEndpoint(),
 		referral.NewBonusLevelsEndpoint(),
 		referral.NewWhatLevelsEndpoint(),
 		referral.NewUpgradeLevelEndpoint(),

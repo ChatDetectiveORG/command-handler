@@ -83,10 +83,8 @@ func OtherUserInRelation(relation models.UserRelations, user *models.Telegramuse
 // BuildReferralLink builds the referral start link for the given user.
 // The first 10 characters of the user's IDHash are used as the start parameter.
 func BuildReferralLink(user *models.Telegramuser) string {
-	startParam := user.IDHash
-	if len(startParam) > 10 {
-		startParam = startParam[:10]
-	}
+	startParam := user.ReferralCode
+
 	return "https://t.me/MajorFanOfInnokentii_bot?start=" + startParam
 }
 

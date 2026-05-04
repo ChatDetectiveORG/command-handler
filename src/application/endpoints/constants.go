@@ -72,6 +72,19 @@ const (
 // ReferralBonusRub is the cash bonus amount per referred user, in rubles.
 const ReferralBonusRub = 5
 
+const Month = 30 * 24 * 60 * 60
+
+// Referral bonus durations
+const (
+	ReferralLevelsDurationSec = 6 * Month
+	ReferralDiscountDurationSec = 1 * Month
+)
+
+// Referral bonus thresholds
+const (
+	ReferralBonusThresholdLevels = 2
+)
+
 // BotUsername is shown in several messages as a mention.
 const BotUsername = "@MajorFanOfInnokentii_bot"
 

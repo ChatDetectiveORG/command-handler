@@ -75,10 +75,6 @@ func NewBonusMoneyEndpoint() h.Endpoint {
 	return newBonusTypeEndpoint(shared.UniqueBonusMoney, "bonus_money", models.ReferralBonusMoney)
 }
 
-func NewBonusDiscountEndpoint() h.Endpoint {
-	return newBonusTypeEndpoint(shared.UniqueBonusDiscount, "bonus_discount", models.ReferralBonusDiscount)
-}
-
 func NewBonusLevelsEndpoint() h.Endpoint {
 	return newBonusTypeEndpoint(shared.UniqueBonusLevels, "bonus_levels", models.ReferralBonusLevels)
 }
@@ -157,11 +153,11 @@ func buildReferralMessage(user *models.Telegramuser, chatID int64) *tele.Message
 	refLinkOffset := utils.TgLen("Твоя личная реферальная ссылка: ")
 	refLinkLen := utils.TgLen(refLink)
 	handshakeOffset := refLinkOffset + refLinkLen
-	bonusText := fmt.Sprintf("%d рублей за друга", shared.ReferralBonusRub)
+	bonusText := fmt.Sprintf("%d рублей за друга (во внутренней валюте бота)", shared.ReferralBonusRub)
 	bonusEmojiOffset := refLinkOffset + refLinkLen + utils.TgLen(" 🤝\nЗа приглашённых друзей ты можешь получить бонус:\n")
 	crownOffset := refLinkOffset + refLinkLen + utils.TgLen(" 🤝\nЗа приглашённых друзей ты можешь получить бонус:\n"+bonusText+"🛍\nили\nРазличные бонусы в системе (скидки/бесплатные услуги на выбор)")
 
-	text := fmt.Sprintf("Твоя личная реферальная ссылка: %s 🤝\nЗа приглашённых друзей ты можешь получить бонус:\n%d рублей за друга🛍\nили\nРазличные бонусы в системе (скидки/бесплатные услуги на выбор)👑",
+	text := fmt.Sprintf("Твоя личная реферальная ссылка: %s 🤝\nЗа приглашённых друзей ты можешь получить бонус:\n%d рублей за друга (во внутренней валюте бота)🛍\nили\nРазличные бонусы в системе (скидки/бесплатные услуги на выбор)👑",
 		refLink,
 		shared.ReferralBonusRub,
 	)
@@ -172,7 +168,7 @@ func buildReferralMessage(user *models.Telegramuser, chatID int64) *tele.Message
 		Entities: tele.Entities{
 			{Type: tele.EntityURL, Offset: refLinkOffset, Length: refLinkLen},
 			{Type: tele.EntityCustomEmoji, Offset: handshakeOffset + utils.TgLen(" "), Length: 2, CustomEmojiID: "5372957680174384345"},
-			{Type: tele.EntityCustomEmoji, Offset: bonusEmojiOffset + utils.TgLen(fmt.Sprintf("%d рублей за друга", shared.ReferralBonusRub)), Length: 2, CustomEmojiID: "5453901475648390219"},
+			{Type: tele.EntityCustomEmoji, Offset: bonusEmojiOffset + utils.TgLen(fmt.Sprintf("%d рублей за друга (во внутренней валюте бота)", shared.ReferralBonusRub)), Length: 2, CustomEmojiID: "5453901475648390219"},
 			{Type: tele.EntityCustomEmoji, Offset: crownOffset, Length: 2, CustomEmojiID: "5229011542011299168"},
 		},
 		PreviewOptions: &tele.PreviewOptions{Disabled: true},
@@ -188,13 +184,13 @@ func buildReferralMessage(user *models.Telegramuser, chatID int64) *tele.Message
 // buildBonusSelectionMessage builds the bonus type selection view.
 func buildBonusSelectionMessage(chatID, msgID int64, currentPref string) *tele.Message {
 	text := fmt.Sprintf(
-		"Выберите бонус за приведённых пользователей:\n⏫%d рублей за каждого пользователя\n⏫Скидка 10%% за первые 5 приведённых пользователей и 5%% за каждого последующего (максимум 80%%, сбрасывается ежемесячно)\n⏫Бесплатный уровень за каждых 5 приведённых пользователей (приведённые пользователи учитываются системой 6 месяцев после подключения бота, уровни рассчитываются с округлением вниз)",
+		"Выберите бонус за приведённых пользователей:\n⏫%d рублей за каждого пользователя (во внутренней валюте бота)\n⏫Бесплатный уровень за каждых %d приведённых пользователей (приведённые пользователи учитываются системой 6 месяцев после подключения бота, уровни рассчитываются с округлением вниз)",
 		shared.ReferralBonusRub,
+		shared.ReferralBonusThresholdLevels,
 	)
 
 	arrowOffset1 := utils.TgLen("Выберите бонус за приведённых пользователей:\n")
-	arrowOffset2 := arrowOffset1 + utils.TgLen(fmt.Sprintf("⏫%d рублей за каждого пользователя\n", shared.ReferralBonusRub))
-	arrowOffset3 := arrowOffset2 + utils.TgLen("⏫Скидка 10% за первые 5 приведённых пользователей и 5% за каждого последующего (максимум 80%, сбрасывается ежемесячно)\n")
+	arrowOffset2 := arrowOffset1 + utils.TgLen(fmt.Sprintf("⏫%d рублей за каждого пользователя (во внутренней валюте бота)\n", shared.ReferralBonusRub))
 
 	return &tele.Message{
 		ID:   int(msgID),
@@ -203,7 +199,6 @@ func buildBonusSelectionMessage(chatID, msgID int64, currentPref string) *tele.M
 		Entities: tele.Entities{
 			{Type: tele.EntityCustomEmoji, Offset: arrowOffset1, Length: 1, CustomEmojiID: "5462995330163289902"},
 			{Type: tele.EntityCustomEmoji, Offset: arrowOffset2, Length: 1, CustomEmojiID: "5462995330163289902"},
-			{Type: tele.EntityCustomEmoji, Offset: arrowOffset3, Length: 1, CustomEmojiID: "5462995330163289902"},
 		},
 		ReplyMarkup: buildBonusKeyboard(currentPref),
 	}
@@ -222,10 +217,9 @@ func buildBonusKeyboard(currentPref string) *tele.ReplyMarkup {
 		InlineKeyboard: [][]tele.InlineButton{
 			{
 				buildBtn("Деньги", shared.UniqueBonusMoney, currentPref == models.ReferralBonusMoney),
-				buildBtn("Скидки", shared.UniqueBonusDiscount, currentPref == models.ReferralBonusDiscount || currentPref == ""),
+				buildBtn("Уровни", shared.UniqueBonusLevels, currentPref == models.ReferralBonusLevels),
 			},
 			{
-				buildBtn("Уровни", shared.UniqueBonusLevels, currentPref == models.ReferralBonusLevels),
 				{Text: "Что такое уровни?", Data: shared.UniqueWhatLevels},
 			},
 		},

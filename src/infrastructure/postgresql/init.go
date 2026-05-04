@@ -46,6 +46,7 @@ func InitPostgresql() *e.ErrorInfo {
 		(*models.MirrorFile)(nil),
 		(*models.Message)(nil),
 		(*models.MessageVersion)(nil),
+		(*models.Referral)(nil),
 	}
 
 	for _, model := range models {

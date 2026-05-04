@@ -38,8 +38,7 @@ func askApprovement(chatID int64, messageID int, hashe *h.HandlerChainHashe) *e.
 		Text: "Вы уверены, что хотите удалить зеркало?",
 		ReplyMarkup: &tele.ReplyMarkup{
 			InlineKeyboard: [][]tele.InlineButton{
-				{{Text: "Да", Data: shared.UniqueMirrorDeleteConfirm}},
-				{{Text: "Нет", Data: shared.UniqueMirrorDeleteCancel}},
+				{{Text: "Да", Data: shared.UniqueMirrorDeleteConfirm}, {Text: "Нет", Data: shared.UniqueMirrorDeleteCancel}},
 			},
 		},
 	}

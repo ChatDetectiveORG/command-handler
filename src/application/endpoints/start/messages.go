@@ -2,6 +2,7 @@ package start
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	shared "github.com/ChatDetectiveORG/command-handler/src/application/endpoints"
@@ -208,6 +209,95 @@ func buildNoContactsMessage(user *models.Telegramuser, chatID int64) (*tele.Mess
 	}, e.Nil()
 }
 
+const referralAlreadyExists = "referral already exists"
+
+func createReferralModels(tx *pg.Tx, update tele.Update, startedUser *models.Telegramuser) (*e.ErrorInfo, *models.Telegramuser, bool) {
+	referralCode := update.Message.Payload
+	linkOwner := &models.Telegramuser{
+		ReferralCode: referralCode,
+	}
+	err := e.Wrap(tx.Model(linkOwner).Where("referral_code = ?", linkOwner.ReferralCode).Select())
+	if e.IsNonNil(err) {
+		return err, nil, false
+	}
+
+	if startedUser.IDHash == linkOwner.IDHash {
+		return e.NewError(referralAlreadyExists, referralAlreadyExists).WithSeverity(e.Ingnored), nil, false
+	}
+
+	var referral = &models.Referral{}
+	err = e.Wrap(tx.Model(referral).Where("invited_user_id = ?", startedUser.ID).Select())
+	if err.Err.Error() != "no rows in result set" {
+		if e.IsNonNil(err) {
+			return err, nil, false
+		}
+
+		return e.NewError(referralAlreadyExists, referralAlreadyExists).WithSeverity(e.Ingnored), nil, false
+	}
+
+	model := &models.Referral{
+		InvitorID: linkOwner.ID,
+		InvitedUserID: startedUser.ID,
+	}
+
+	_, eRaw := tx.Model(model).Insert()
+	if eRaw != nil {
+		return e.FromError(eRaw, "failed to insert referral").WithSeverity(e.Critical), nil, false
+	}
+
+	return e.Nil(), linkOwner, referral != nil
+}
+
+func sendMessageToInvitor(invitorUser *models.Telegramuser, startedUser *models.Telegramuser, userAlreadyInvited bool, hash *h.HandlerChainHashe) *e.ErrorInfo {
+	invitorID, err := invitorUser.GetTgId()
+	if e.IsNonNil(err) {
+		return err
+	}
+
+	invitedFullName, err := startedUser.GetFullName()
+	if e.IsNonNil(err) {
+		return err
+	}
+
+	invitedUserID, err := startedUser.GetTgId()
+	if e.IsNonNil(err) {
+		return err
+	}
+
+	sb := strings.Builder{}
+	if userAlreadyInvited {
+		sb.WriteString("![😴](5462990652943904884)Пользователь ")
+		sb.WriteString("[" + utils.EscapeMarkdownV2(invitedFullName) + "](tg://user?id=" + strconv.FormatInt(invitedUserID, 10) + ")")
+		sb.WriteString("уже был приглашён тобой или другими пользователями\n\n")
+		sb.WriteString("Бонус за него не будет начислен")
+	} else {
+		sb.WriteString("*![🤝](tg://emoji?id=5463256910851546817)Ты пригласил пользователя ")
+		sb.WriteString("[" + utils.EscapeMarkdownV2(invitedFullName) + "](tg://user?id=" + strconv.FormatInt(invitedUserID, 10) + ")")
+		sb.WriteString(" в бот!*\n\n")
+		sb.WriteString("Ты получишь вознаграждение когда он подключит бота")
+	}
+
+	message := &tele.Message{
+		Chat: &tele.Chat{ID: invitorID},
+		Text: sb.String(),
+	}
+
+	return hash.WithParseMode(true).Emit(shared.OutgoingRoutingKey, message)
+}
+
+func checkReferralCode(tx *pg.Tx, update tele.Update, startedUser *models.Telegramuser, hash *h.HandlerChainHashe) *e.ErrorInfo {
+	if update.Message.Payload == "" {
+		return e.Nil()
+	}
+
+	err, linkOwner, userAlreadyInvited := createReferralModels(tx, update, startedUser)
+	if e.IsNonNil(err) {
+		return err
+	}
+
+	return sendMessageToInvitor(linkOwner, startedUser, userAlreadyInvited, hash)
+}
+
 func run(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 	db := postgresql.GetDB()
 	tgUser := update.Message.Sender
@@ -221,6 +311,11 @@ func run(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 
 	user := &models.Telegramuser{}
 	if err := user.GetOrCreate(tx, tgUser); e.IsNonNil(err) {
+		return err
+	}
+
+	err := checkReferralCode(tx, update, user, hashe)
+	if e.IsNonNil(err) {
 		return err
 	}
 
