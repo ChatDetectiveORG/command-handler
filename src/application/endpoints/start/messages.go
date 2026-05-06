@@ -211,28 +211,32 @@ func buildNoContactsMessage(user *models.Telegramuser, chatID int64) (*tele.Mess
 
 const referralAlreadyExists = "referral already exists"
 
-func createReferralModels(tx *pg.Tx, update tele.Update, startedUser *models.Telegramuser) (*e.ErrorInfo, *models.Telegramuser, bool) {
+func createReferralModels(tx *pg.Tx, update tele.Update, startedUser *models.Telegramuser, alreadyWasBotUser bool) (*e.ErrorInfo, *models.Telegramuser, bool) {
+	if alreadyWasBotUser {
+		return e.NewError(referralAlreadyExists, referralAlreadyExists).WithSeverity(e.Ingnored).PushStack(), nil, true
+	}
+	
 	referralCode := update.Message.Payload
 	linkOwner := &models.Telegramuser{
 		ReferralCode: referralCode,
 	}
 	err := e.Wrap(tx.Model(linkOwner).Where("referral_code = ?", linkOwner.ReferralCode).Select())
 	if e.IsNonNil(err) {
-		return err, nil, false
+		return err.PushStack(), nil, false
 	}
 
 	if startedUser.IDHash == linkOwner.IDHash {
-		return e.NewError(referralAlreadyExists, referralAlreadyExists).WithSeverity(e.Ingnored), nil, false
+		return e.NewError(referralAlreadyExists, referralAlreadyExists).WithSeverity(e.Ingnored).PushStack(), nil, true
 	}
 
 	var referral = &models.Referral{}
 	err = e.Wrap(tx.Model(referral).Where("invited_user_id = ?", startedUser.ID).Select())
-	if err.Err.Error() != "no rows in result set" {
+	if e.IsNil(err) || !strings.Contains(err.Err.Error(), "pg: no rows in result set") {
 		if e.IsNonNil(err) {
-			return err, nil, false
+			return err.PushStack(), nil, false
 		}
 
-		return e.NewError(referralAlreadyExists, referralAlreadyExists).WithSeverity(e.Ingnored), nil, false
+		return e.NewError(referralAlreadyExists, referralAlreadyExists).WithSeverity(e.Ingnored).PushStack(), nil, true
 	}
 
 	model := &models.Referral{
@@ -245,35 +249,42 @@ func createReferralModels(tx *pg.Tx, update tele.Update, startedUser *models.Tel
 		return e.FromError(eRaw, "failed to insert referral").WithSeverity(e.Critical), nil, false
 	}
 
-	return e.Nil(), linkOwner, referral != nil
+	return e.Nil(), linkOwner, false
 }
 
-func sendMessageToInvitor(invitorUser *models.Telegramuser, startedUser *models.Telegramuser, userAlreadyInvited bool, hash *h.HandlerChainHashe) *e.ErrorInfo {
+// alreadyWasBotUser is true when the invited user already had a row before this /start (no signup in this request).
+func sendMessageToInvitor(invitorUser *models.Telegramuser, startedUser *models.Telegramuser, alreadyWasBotUser bool, userAlreadyInvited bool, hash *h.HandlerChainHashe) *e.ErrorInfo {
 	invitorID, err := invitorUser.GetTgId()
 	if e.IsNonNil(err) {
-		return err
+		return err.PushStack()
 	}
 
 	invitedFullName, err := startedUser.GetFullName()
 	if e.IsNonNil(err) {
-		return err
+		return err.PushStack()
 	}
 
 	invitedUserID, err := startedUser.GetTgId()
 	if e.IsNonNil(err) {
-		return err
+		return err.PushStack()
 	}
 
 	sb := strings.Builder{}
-	if userAlreadyInvited {
-		sb.WriteString("![😴](5462990652943904884)Пользователь ")
+	
+	if alreadyWasBotUser {
+		sb.WriteString("![😴](tg://emoji?id=5462990652943904884)Пользователь ")
 		sb.WriteString("[" + utils.EscapeMarkdownV2(invitedFullName) + "](tg://user?id=" + strconv.FormatInt(invitedUserID, 10) + ")")
-		sb.WriteString("уже был приглашён тобой или другими пользователями\n\n")
+		sb.WriteString(" уже использует бота\n\n")
+		sb.WriteString("Бонус за него не будет начислен")
+	}else if userAlreadyInvited {
+		sb.WriteString("![😴](tg://emoji?id=5462990652943904884)Пользователь ")
+		sb.WriteString("[" + utils.EscapeMarkdownV2(invitedFullName) + "](tg://user?id=" + strconv.FormatInt(invitedUserID, 10) + ")")
+		sb.WriteString(" уже был приглашён тобой или другими пользователями\n\n")
 		sb.WriteString("Бонус за него не будет начислен")
 	} else {
 		sb.WriteString("*![🤝](tg://emoji?id=5463256910851546817)Ты пригласил пользователя ")
 		sb.WriteString("[" + utils.EscapeMarkdownV2(invitedFullName) + "](tg://user?id=" + strconv.FormatInt(invitedUserID, 10) + ")")
-		sb.WriteString(" в бот!*\n\n")
+		sb.WriteString(" в бот\\!*\n\n")
 		sb.WriteString("Ты получишь вознаграждение когда он подключит бота")
 	}
 
@@ -285,17 +296,32 @@ func sendMessageToInvitor(invitorUser *models.Telegramuser, startedUser *models.
 	return hash.WithParseMode(true).Emit(shared.OutgoingRoutingKey, message)
 }
 
-func checkReferralCode(tx *pg.Tx, update tele.Update, startedUser *models.Telegramuser, hash *h.HandlerChainHashe) *e.ErrorInfo {
+func parseCommandPayload(message *tele.Message) {
+	if !strings.HasPrefix(message.Text, "/") {
+		return
+	}
+
+	parts := strings.Fields(message.Text)
+	if len(parts) < 2 {
+		return
+	}
+
+	message.Payload = strings.Trim(parts[1], " ")
+}
+
+func checkReferralCode(tx *pg.Tx, update tele.Update, startedUser *models.Telegramuser, hash *h.HandlerChainHashe, signupCreatedUser bool) *e.ErrorInfo {
+	parseCommandPayload(update.Message)
+	
 	if update.Message.Payload == "" {
 		return e.Nil()
 	}
 
-	err, linkOwner, userAlreadyInvited := createReferralModels(tx, update, startedUser)
+	err, linkOwner, userAlreadyInvited := createReferralModels(tx, update, startedUser, !signupCreatedUser)
 	if e.IsNonNil(err) {
-		return err
+		return err.PushStack()
 	}
 
-	return sendMessageToInvitor(linkOwner, startedUser, userAlreadyInvited, hash)
+	return sendMessageToInvitor(linkOwner, startedUser, !signupCreatedUser, userAlreadyInvited, hash)
 }
 
 func run(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
@@ -310,13 +336,14 @@ func run(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 	defer tx.Rollback()
 
 	user := &models.Telegramuser{}
-	if err := user.GetOrCreate(tx, tgUser); e.IsNonNil(err) {
-		return err
+	signupCreatedUser, err := user.GetOrCreate(tx, tgUser)
+	if e.IsNonNil(err) {
+		return err.PushStack()
 	}
 
-	err := checkReferralCode(tx, update, user, hashe)
-	if e.IsNonNil(err) {
-		return err
+	err = checkReferralCode(tx, update, user, hashe, signupCreatedUser)
+	if e.IsNonNil(err) && err.Err.Error() != referralAlreadyExists {
+		return err.PushStack()
 	}
 
 	// Always refresh name/username/metadata. For new users this is a no-op in practice;
@@ -328,12 +355,12 @@ func run(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 	}
 
 	if err := hashe.Emit(shared.OutgoingRoutingKey, buildWelcomeMessage(tgUser, chatID)); e.IsNonNil(err) {
-		return err
+		return err.PushStack()
 	}
 
 	if !tgUser.IsPremium {
 		if err := hashe.Emit(shared.OutgoingRoutingKey, buildNonPremiumNoticeMessage(chatID)); e.IsNonNil(err) {
-			return err
+			return err.PushStack()
 		}
 	}
 
@@ -346,12 +373,12 @@ func runShowContacts(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInf
 
 	user, err := shared.GetUserByTgID(db, chatID)
 	if e.IsNonNil(err) {
-		return err
+		return err.PushStack()
 	}
 
 	relations, err := shared.ContactsForUser(db, user)
 	if e.IsNonNil(err) {
-		return err
+		return err.PushStack()
 	}
 
 	var contacts []*models.Telegramuser
@@ -364,7 +391,7 @@ func runShowContacts(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInf
 
 	msg, err := buildContactsMessage(user, contacts, chatID)
 	if e.IsNonNil(err) {
-		return err
+		return err.PushStack()
 	}
 
 	if emitErr := hashe.Emit(shared.OutgoingRoutingKey, msg); e.IsNonNil(emitErr) {

@@ -82,7 +82,10 @@ const (
 
 // Referral bonus thresholds
 const (
+	// ReferralBonusThresholdLevels is how many referred users unlock one bonus level grant.
 	ReferralBonusThresholdLevels = 2
+	// ReferralBonusLevelsPerUnlock is how many user levels are stored per unlock (one row may cover several referrals).
+	ReferralBonusLevelsPerUnlock = 1
 )
 
 // BotUsername is shown in several messages as a mention.

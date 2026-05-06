@@ -221,6 +221,7 @@ func buildBonusKeyboard(currentPref string) *tele.ReplyMarkup {
 			},
 			{
 				{Text: "Что такое уровни?", Data: shared.UniqueWhatLevels},
+				{Text: "назад", Data: shared.UniqueBonusBack},
 			},
 		},
 	}
@@ -252,7 +253,7 @@ func buildWhatLevelsMessage(level models.LevelSummary, isAdmin bool, chatID int6
 		nextDecreaseText = fmt.Sprintf(
 			"Ближайшее уменьшение: -%d уровня(ей) %s",
 			level.NearestDecreaseAmount,
-			time.Unix(level.NearestDecreaseAt, 0).Format("02.01.2006 15:04"),
+			time.Unix(level.NearestDecreaseAt, 0).UTC().Format("02.01.2006 15:04 UTC"),
 		)
 	}
 	adminText := ""
@@ -304,7 +305,7 @@ func buildLevelCommandMessage(level models.LevelSummary, chatID int64) *tele.Mes
 	if level.NearestDecreaseAt > 0 {
 		nextDecreaseText = fmt.Sprintf(
 			"Дата ближайшего уменьшения: %s\nРазмер ближайшего уменьшения: -%d уровня(ей)",
-			time.Unix(level.NearestDecreaseAt, 0).Format("02.01.2006 15:04"),
+			time.Unix(level.NearestDecreaseAt, 0).UTC().Format("02.01.2006 15:04 UTC"),
 			level.NearestDecreaseAmount,
 		)
 	}
