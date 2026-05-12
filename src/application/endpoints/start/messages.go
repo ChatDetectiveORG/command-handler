@@ -68,21 +68,6 @@ func buildWelcomeMessage(tgUser *tele.User, chatID int64) *tele.Message {
 	}
 }
 
-func buildNonPremiumNoticeMessage(chatID int64) *tele.Message {
-	return &tele.Message{
-		Chat: &tele.Chat{ID: chatID},
-		Text: "☝️Без подписки Telegram Premium бот может работать только в тех чатах, где собеседник использует бота. Нажми на кнопку ниже, чтобы узнать, в каких чатах бот будет работать",
-		Entities: tele.Entities{
-			{Type: tele.EntityCustomEmoji, Offset: 0, Length: 2, CustomEmojiID: "5453958478454341679"},
-		},
-		ReplyMarkup: &tele.ReplyMarkup{
-			InlineKeyboard: [][]tele.InlineButton{
-				{{Text: "Показать список", Data: showContactsUnique}},
-			},
-		},
-	}
-}
-
 // buildContactsMessage constructs the "list of bot contacts" message for non-premium users.
 func buildContactsMessage(user *models.Telegramuser, contacts []*models.Telegramuser, chatID int64) (*tele.Message, *e.ErrorInfo) {
 	if len(contacts) == 0 {
@@ -356,12 +341,6 @@ func run(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 
 	if err := hashe.Emit(shared.OutgoingRoutingKey, buildWelcomeMessage(tgUser, chatID)); e.IsNonNil(err) {
 		return err.PushStack()
-	}
-
-	if !tgUser.IsPremium {
-		if err := hashe.Emit(shared.OutgoingRoutingKey, buildNonPremiumNoticeMessage(chatID)); e.IsNonNil(err) {
-			return err.PushStack()
-		}
 	}
 
 	return e.Nil()

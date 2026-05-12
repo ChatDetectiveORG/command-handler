@@ -10,7 +10,6 @@ import (
 	"time"
 
 	shared "github.com/ChatDetectiveORG/command-handler/src/application/endpoints"
-	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/config"
 	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/postgresql"
 	redisinfra "github.com/ChatDetectiveORG/command-handler/src/infrastructure/redis"
 	paymentservice "github.com/ChatDetectiveORG/payment-service"
@@ -271,7 +270,7 @@ func textMessage(chatID int64, text string) *tele.Message {
 }
 
 func setWaitingForToken(chatID int64) *e.ErrorInfo {
-	conn, err := redisConn()
+	conn, err := redisinfra.RedisConn()
 	if e.IsNonNil(err) {
 		return err
 	}
@@ -284,7 +283,7 @@ func setWaitingForToken(chatID int64) *e.ErrorInfo {
 }
 
 func isWaitingForToken(chatID int64) (bool, *e.ErrorInfo) {
-	conn, err := redisConn()
+	conn, err := redisinfra.RedisConn()
 	if e.IsNonNil(err) {
 		return false, err
 	}
@@ -297,7 +296,7 @@ func isWaitingForToken(chatID int64) (bool, *e.ErrorInfo) {
 }
 
 func clearWaitingForToken(chatID int64) *e.ErrorInfo {
-	conn, err := redisConn()
+	conn, err := redisinfra.RedisConn()
 	if e.IsNonNil(err) {
 		return err
 	}
@@ -307,18 +306,6 @@ func clearWaitingForToken(chatID int64) *e.ErrorInfo {
 		return e.FromError(rawErr, "failed to clear mirror wait state").WithSeverity(e.Notice)
 	}
 	return e.Nil()
-}
-
-func redisConn() (redis.Conn, *e.ErrorInfo) {
-	cfg, err := config.FetchConfig()
-	if e.IsNonNil(err) {
-		return nil, err
-	}
-	pool, err := redisinfra.GetPool(cfg)
-	if e.IsNonNil(err) {
-		return nil, err
-	}
-	return pool.Get(), e.Nil()
 }
 
 func waitKey(chatID int64) string {

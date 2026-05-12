@@ -10,6 +10,7 @@ import (
 	businessconnection "github.com/ChatDetectiveORG/command-handler/src/application/endpoints/businessConnection"
 	checkconnection "github.com/ChatDetectiveORG/command-handler/src/application/endpoints/checkConnection"
 	deletedata "github.com/ChatDetectiveORG/command-handler/src/application/endpoints/deleteData"
+	exportchat "github.com/ChatDetectiveORG/command-handler/src/application/endpoints/exportChat"
 	"github.com/ChatDetectiveORG/command-handler/src/application/endpoints/help"
 	howencryption "github.com/ChatDetectiveORG/command-handler/src/application/endpoints/howEncryption"
 	"github.com/ChatDetectiveORG/command-handler/src/application/endpoints/installation"
@@ -206,5 +207,10 @@ var router h.Router = h.Router{
 		deletedata.NewDeleteDataEndpoint(),
 		deletedata.NewDeleteConfirmEndpoint(),
 		deletedata.NewDeleteCancelEndpoint(),
+
+		// Chat export: list → preview → invoice. Actual export pipeline lives in chat-export-service.
+		exportchat.NewSelectChatEndpoint(),
+		exportchat.NewViewChatEndpoint(),
+		exportchat.NewRestoreChatEndpoint(),
 	},
 }

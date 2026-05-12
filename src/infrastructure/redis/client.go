@@ -55,3 +55,15 @@ func NewRedisConnection(cfg *config.Config) (redis.Conn, *e.ErrorInfo) {
 
 	return pool.Get(), e.Nil()
 }
+
+func RedisConn() (redis.Conn, *e.ErrorInfo) {
+	cfg, err := config.FetchConfig()
+	if e.IsNonNil(err) {
+		return nil, err
+	}
+	pool, err := GetPool(cfg)
+	if e.IsNonNil(err) {
+		return nil, err
+	}
+	return pool.Get(), e.Nil()
+}

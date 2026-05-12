@@ -56,6 +56,8 @@ func ShiftEntities(entities []tele.MessageEntity, delta int) []tele.MessageEntit
 
 // ContactsForUser returns all UserRelations entries for the given user.
 // Each entry's "other" user (the one that is not the query user) is populated.
+
+// Deprecated
 func ContactsForUser(db *pg.DB, user *models.Telegramuser) ([]models.UserRelations, *e.ErrorInfo) {
 	var relations []models.UserRelations
 	eraw := db.Model(&relations).
@@ -79,6 +81,24 @@ func OtherUserInRelation(relation models.UserRelations, user *models.Telegramuse
 	}
 	return relation.FirstUser
 }
+
+func SelectAllInterlocutors(db *pg.DB, user *models.Telegramuser) ([]*models.Telegramuser, *e.ErrorInfo) {
+	relations, err := ContactsForUser(db, user)
+	if e.IsNonNil(err) {
+		return nil, err
+	}
+
+	var result []*models.Telegramuser
+	for i := range relations {
+		other := OtherUserInRelation(relations[i], user)
+		if other != nil {
+			result = append(result, other)
+		}
+	}
+
+	return result, e.Nil()
+}
+
 
 // BuildReferralLink builds the referral start link for the given user.
 // The first 10 characters of the user's IDHash are used as the start parameter.

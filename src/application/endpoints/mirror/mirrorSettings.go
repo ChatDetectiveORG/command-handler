@@ -10,6 +10,7 @@ import (
 	h "github.com/ChatDetectiveORG/shared/handlers"
 	"github.com/gomodule/redigo/redis"
 	tele "gopkg.in/telebot.v4"
+	redisInfra "github.com/ChatDetectiveORG/command-handler/src/infrastructure/redis"
 
 	models "github.com/ChatDetectiveORG/shared/postgresModels"
 )
@@ -64,7 +65,7 @@ func mirrorDeleteCancel(chatID int64, messageID int, hashe *h.HandlerChainHashe)
 func mirrorDeleteConfirm(chatID int64, messageID int, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 	db := postgresql.GetDB()
 
-	conn, err := redisConn()
+	conn, err := redisInfra.RedisConn()
 	if e.IsNonNil(err) {
 		return err
 	}

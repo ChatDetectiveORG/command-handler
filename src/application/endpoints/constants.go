@@ -35,6 +35,17 @@ const (
 	UniqueUpgradeLevel    = "upgrade_level"
 	UniqueDeleteConfirm   = "delete_confirm"
 	UniqueDeleteCancel    = "delete_cancel"
+
+	UniqueChatSelectPage  = "chat_select_page"
+	UniqueGoToChat        = "goto_chat"
+	UniqueRestoreChat     = "restore_chat"
+)
+
+// Callback data field names used in the export flow. Centralised so encoder and decoder
+// cannot drift again (see Dev.md note about the previous "id" vs "code" mismatch).
+const (
+	CallbackFieldCode = "code"
+	CallbackFieldPage = "page"
 )
 
 // Custom emoji Sticker IDs for inline button state indicators.

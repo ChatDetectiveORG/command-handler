@@ -13,6 +13,7 @@ import (
 	h "github.com/ChatDetectiveORG/shared/handlers"
 	models "github.com/ChatDetectiveORG/shared/postgresModels"
 	"github.com/ChatDetectiveORG/shared/utils"
+	redisInfra "github.com/ChatDetectiveORG/command-handler/src/infrastructure/redis"
 
 	tele "gopkg.in/telebot.v4"
 )
@@ -106,7 +107,7 @@ func runMirrorInfo(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo 
 	}
 
 	hash := formatMirrorViewHash(update.Callback.Message.Chat.ID)
-	conn, err := redisConn()
+	conn, err := redisInfra.RedisConn()
 	if e.IsNonNil(err) {
 		return err
 	}
