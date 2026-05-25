@@ -164,7 +164,7 @@ func buildNoContactsMessage(user *models.Telegramuser, chatID int64) (*tele.Mess
 		Length: mentionLen,
 	})
 
-	sb.WriteString(". К сожалению, для работы бота без Telegram Premium необходимо, чтобы хотя бы у одного человека в чате был подключён бот\n\n")
+	sb.WriteString(". К сожалению, для работы бота без подключения бота в профиле необходимо, чтобы хотя бы у одного человека в чате был подключён бот\n\n")
 
 	groupEmojiOffset := utils.TgLen(sb.String())
 	sb.WriteString("👥Хочешь это исправить? Пригласи друзей по реферальной программе и получи ")
