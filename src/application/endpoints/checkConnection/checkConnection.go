@@ -88,10 +88,10 @@ func run(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 	}
 
 	if user.BusinessConnectionIDHash != "" {
-		return hashe.Emit(shared.OutgoingRoutingKey, buildConnectedMessage(chatID))
+		return hashe.WithParseMode(true).Emit(shared.OutgoingRoutingKey, buildConnectedMessage(chatID))
 	}
 
-	if err := hashe.Emit(shared.OutgoingRoutingKey, buildDisconnectedMessage(chatID)); e.IsNonNil(err) {
+	if err := hashe.WithParseMode(true).Emit(shared.OutgoingRoutingKey, buildDisconnectedMessage(chatID)); e.IsNonNil(err) {
 		return err
 	}
 

@@ -45,7 +45,7 @@ func run(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 			return err
 		}
 
-		if err := hashe.Emit(shared.OutgoingRoutingKey, buildConnectedMessage(userChatID)); e.IsNonNil(err) {
+		if err := hashe.WithParseMode(true).Emit(shared.OutgoingRoutingKey, buildConnectedMessage(userChatID)); e.IsNonNil(err) {
 			return err
 		}
 
@@ -59,7 +59,7 @@ func run(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 		}
 
 		disconnectedMsg := buildDisconnectedMessage(userChatID)
-		if err := hashe.Emit(shared.OutgoingRoutingKey, disconnectedMsg); e.IsNonNil(err) {
+		if err := hashe.WithParseMode(true).Emit(shared.OutgoingRoutingKey, disconnectedMsg); e.IsNonNil(err) {
 			return err
 		}
 

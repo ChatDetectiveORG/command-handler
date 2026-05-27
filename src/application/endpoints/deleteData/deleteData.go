@@ -8,6 +8,7 @@ import (
 	e "github.com/ChatDetectiveORG/shared/errors"
 	h "github.com/ChatDetectiveORG/shared/handlers"
 	models "github.com/ChatDetectiveORG/shared/postgresModels"
+	"github.com/ChatDetectiveORG/shared/telegram"
 	"github.com/go-pg/pg/v10"
 	tele "gopkg.in/telebot.v4"
 )
@@ -51,32 +52,36 @@ func NewDeleteCancelEndpoint() h.Endpoint {
 	return ep
 }
 
+// Builds data deletion warning message
 func buildWarningMessage(chatID int64) *tele.Message {
-	return &tele.Message{
-		Chat: &tele.Chat{ID: chatID},
-		Text: "⚠️ВНИМАНИЕ⚠️\nУдаление данных сотрёт всю информацию о вас с наших серверов, включая совершённые транзакции. Это значит, что вы НЕ сможете восстановить свои чаты в случае их удаления и совершённые покупки.\n\nЭто действие нельзя отменить. Вы уверены, что хотите стереть все данные?",
-		Entities: tele.Entities{
-			{Type: tele.EntityCustomEmoji, Offset: 0, Length: 2, CustomEmojiID: "5395358455768837479"},
-			{Type: tele.EntityBold, Offset: 2, Length: 8},
-			{Type: tele.EntityCustomEmoji, Offset: 10, Length: 2, CustomEmojiID: "5395358455768837479"},
-			{Type: tele.EntityBold, Offset: 126, Length: 2},
-			{Type: tele.EntityItalic, Offset: 235, Length: 42},
-		},
-		ReplyMarkup: &tele.ReplyMarkup{
-			InlineKeyboard: [][]tele.InlineButton{
-				{
-					{Text: "Нет!", Data: shared.UniqueDeleteCancel},
-					{Text: "Да.", Data: shared.UniqueDeleteConfirm},
-				},
-			},
-		},
-	}
+	messageBuilder := telegram.MessageBuilder{Mdv2Enabled: true}
+	messageBuilder.WriteString(
+		"⚠️", telegram.TextFormat{Type: telegram.TextFormatTypeLink}.WithCustomEmojiID("5395358455768837479"),
+	).WriteString(
+		"ВНИМАНИЕ", telegram.TextFormat{Type: telegram.TextFormatTypeBold},
+	).WriteString(
+		"⚠️", telegram.TextFormat{Type: telegram.TextFormatTypeLink}.WithCustomEmojiID("5395358455768837479"),
+	).WriteString(
+		"\nУдаление данных сотрёт всю информацию о вас с наших серверов, включая совершённые транзакции. Это значит, что вы ",
+	).WriteString(
+		"НЕ", telegram.TextFormat{Type: telegram.TextFormatTypeBold},
+	).WriteString(
+		" сможете восстановить свои чаты в случае их удаления и совершённые покупки.\n\n",
+	).WriteString(
+		"Это действие нельзя отменить. Вы уверены, что хотите стереть все данные?", telegram.TextFormat{Type: telegram.TextFormatTypeItalic},
+	)
+
+	messageBuilder.AddButton(tele.InlineButton{Text: "Нет!", Data: shared.UniqueDeleteCancel})
+	messageBuilder.AddButton(tele.InlineButton{Text: "Да.", Data: shared.UniqueDeleteConfirm})
+
+	return messageBuilder.Build(chatID)
 }
 
 func runDeleteData(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 	return hashe.Emit(shared.OutgoingRoutingKey, buildWarningMessage(update.Message.Chat.ID))
 }
 
+// Sends message about data deletion cancellation
 func runDeleteCancel(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 	deleteMsg := &tele.Message{
 		ID:   update.Callback.Message.ID,
@@ -85,6 +90,7 @@ func runDeleteCancel(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInf
 	if err := hashe.EmitDeleteMessage(shared.OutgoingRoutingKey, deleteMsg); e.IsNonNil(err) {
 		return err
 	}
+
 	return hashe.EmitCallback(
 		shared.OutgoingRoutingKey,
 		update.Callback,
@@ -92,6 +98,11 @@ func runDeleteCancel(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInf
 	)
 }
 
+// Deletes ALL user data
+//
+// Supported models: UserSettings, UserLevels, Messages, MessageVersions, Mirrors, Payments, Referrals, Telegramuser
+//
+// UserRelations are not deleted, because deletion can lead to poor experience of interlocutors in chats with user that initiated data deletion. (they are owners of this data too.)
 func runDeleteConfirm(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 	db := postgresql.GetDB()
 	tgUserID := update.Callback.Sender.ID
@@ -129,12 +140,6 @@ func runDeleteConfirm(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorIn
 			Delete()
 	}
 
-	// Delete UserRelations (both directions).
-	_, _ = tx.Model((*models.UserRelations)(nil)).
-		Where("first_user_id = ?", user.ID).Delete()
-	_, _ = tx.Model((*models.UserRelations)(nil)).
-		Where("second_user_id = ?", user.ID).Delete()
-
 	// Delete UserLevels.
 	_, _ = tx.Model((*models.UserLevels)(nil)).
 		Where("linked_user_id = ?", user.ID).
@@ -143,6 +148,22 @@ func runDeleteConfirm(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorIn
 	// Delete UserSettings.
 	_, _ = tx.Model((*models.UserSettings)(nil)).
 		Where("linked_user_id = ?", user.ID).
+		Delete()
+
+	// Delete Mirrors.
+	_, _ = tx.Model((*models.Mirror)(nil)).
+		Where("owner_id = ?", user.ID).
+		Delete()
+
+	// Delete Payments.
+	_, _ = tx.Model((*models.Payment)(nil)).
+		Where("client_id = ?", user.ID).
+		Delete()
+	
+	// Delete referrals
+	_, _ = tx.Model((*models.Referral)(nil)).
+		WhereOr("invitor_id = ?", user.ID).
+		WhereOr("invited_user_id = ?", user.ID).
 		Delete()
 
 	// Delete the user.

@@ -1,26 +1,19 @@
 package exportchat
 
 import (
-	"fmt"
-	"strings"
+	"strconv"
 	"time"
 
 	shared "github.com/ChatDetectiveORG/command-handler/src/application/endpoints"
 	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/postgresql"
-	cdredis "github.com/ChatDetectiveORG/command-handler/src/infrastructure/redis"
 	e "github.com/ChatDetectiveORG/shared/errors"
 	h "github.com/ChatDetectiveORG/shared/handlers"
 	models "github.com/ChatDetectiveORG/shared/postgresModels"
+	"github.com/ChatDetectiveORG/shared/telegram"
 	"github.com/ChatDetectiveORG/shared/utils"
 
 	tele "gopkg.in/telebot.v4"
 )
-
-// restoreCallbackMeta is the payload stashed in Redis when the user opens a chat preview, so the
-// "Восстановить" button can carry a stable short id instead of trying to fit chat data inline.
-type restoreCallbackMeta struct {
-	InterlocutorCode string `json:"interlocutor_code"`
-}
 
 func NewViewChatEndpoint() h.Endpoint {
 	ep := h.Endpoint{}
@@ -35,19 +28,9 @@ func NewViewChatEndpoint() h.Endpoint {
 	return ep
 }
 
-func buildMessage(callbackData string, messageID int, chatID int64, sender *models.Telegramuser) (*tele.Message, *e.ErrorInfo) {
+// buildMessage builds the message for the chat preview.
+func buildMessage(messageID int, chatID int64, sender *models.Telegramuser, interlocutor *models.Telegramuser, code string) (*tele.Message, *e.ErrorInfo) {
 	db := postgresql.GetDB()
-
-	parsedData := utils.ParseCallbackData(callbackData)
-	code := parsedData[shared.CallbackFieldCode]
-	if code == "" {
-		return nil, e.NewError("missing interlocutor code", "callback data has no chat code").WithSeverity(e.Notice)
-	}
-
-	interlocutor := &models.Telegramuser{}
-	if eRaw := db.Model(interlocutor).Where("referral_code = ?", code).Select(); e.IsNonNil(eRaw) {
-		return nil, e.FromError(eRaw, "failed to load interlocutor by referral code").WithSeverity(e.Notice)
-	}
 
 	tgID, err := interlocutor.GetTgId()
 	if e.IsNonNil(err) {
@@ -64,45 +47,65 @@ func buildMessage(callbackData string, messageID int, chatID int64, sender *mode
 		return nil, err.PushStack()
 	}
 
-	sb := strings.Builder{}
-	sb.WriteString(fmt.Sprintf("*Чат с ![%s](tg://user?id=%d)*", fullName, tgID))
-	sb.WriteString("\n")
+	messageBuilder := telegram.MessageBuilder{Mdv2Enabled: true}
+
+	messageBuilder.WriteString(
+		"Чат с ", telegram.TextFormat{Type: telegram.TextFormatTypeBold},
+	).WriteString(
+		fullName, telegram.TextFormat{Type: telegram.TextFormatTypeLink}.WithUserMention(tgID), telegram.TextFormat{Type: telegram.TextFormatTypeBold},
+	).WriteString("\n")
+	
 	if count > 0 {
-		sb.WriteString(fmt.Sprintf("_Возможно восстановить %d сообщений_", count))
+		messageBuilder.WriteString(
+			"Возможно восстановить " + strconv.Itoa(count) + " сообщений", telegram.TextFormat{Type: telegram.TextFormatTypeItalic},
+		)
 	} else {
-		sb.WriteString("_К сожалению, чат не может быть восстановлен_\\. ![Почему?](https://t.me/chatdetective_support/1210)")
+		messageBuilder.WriteString(
+			"К сожалению, чат не может быть восстановлен.", telegram.TextFormat{Type: telegram.TextFormatTypeItalic},	
+		).WriteString(
+			"Почему?", telegram.TextFormat{Type: telegram.TextFormatTypeLink, URL: "https://t.me/chatdetective_support/1210"},
+		)
 	}
 
-	keyboardRow := []tele.InlineButton{
-		{Text: "Назад", Data: shared.UniqueChatSelectPage},
-	}
+	messageBuilder.AddButton(tele.InlineButton{Text: "Назад", Data: shared.UniqueChatSelectPage})
+	messageBuilder.NextRow()
 	if count > 0 {
-		metaID, err := cdredis.StoreCallbackMeta(restoreCallbackMeta{InterlocutorCode: code})
-		if e.IsNonNil(err) {
-			return nil, err.PushStack()
-		}
-		keyboardRow = append(keyboardRow, tele.InlineButton{
-			Text: "Восстановить",
-			Data: shared.UniqueRestoreChat + "\n" + metaID,
-		})
+		messageBuilder.AddButton(tele.InlineButton{Text: "Восстановить", Data: utils.DumpCallbackData(shared.UniqueRestoreChat, map[string]any{"interlocutor_code": code})})
 	}
 
-	return &tele.Message{
-		ID:          messageID,
-		Chat:        &tele.Chat{ID: chatID},
-		Text:        sb.String(),
-		ReplyMarkup: &tele.ReplyMarkup{InlineKeyboard: [][]tele.InlineButton{keyboardRow}},
-	}, e.Nil()
+	return messageBuilder.WithMessageID(messageID).Build(chatID), e.Nil()
 }
 
 func runViewChat(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
+	if update.Callback == nil {
+		return e.NewError("missing callback", "view_chat requires callback").WithSeverity(e.Notice)
+	}
+
 	db := postgresql.GetDB()
 	sender, err := shared.GetUserByTgID(db, update.Callback.Sender.ID)
 	if e.IsNonNil(err) {
 		return err.PushStack()
 	}
 
-	msg, err := buildMessage(update.Callback.Data, update.Callback.Message.ID, update.Callback.Message.Chat.ID, sender)
+	parsedData := utils.ParseCallbackData(update.Callback.Data)
+	code := parsedData[shared.CallbackFieldCode]
+	if code == "" {
+		return e.NewError("missing interlocutor code", "callback data has no chat code").WithSeverity(e.Notice)
+	}
+
+	interlocutor := &models.Telegramuser{}
+	if eRaw := db.Model(interlocutor).Where("referral_code = ?", code).Select(); e.IsNonNil(eRaw) {
+		return e.FromError(eRaw, "failed to load interlocutor by referral code").WithSeverity(e.Notice)
+	}
+
+	err = checkCallbackPermission(sender, interlocutor, db)
+	if e.IsNonNil(err) {
+		err = hashe.EmitCallback(shared.OutgoingRoutingKey, update.Callback, shared.AnswerCallbackBanner("У вас нет доступа к этой странице", update.Callback))
+
+		return err
+	}
+
+	msg, err := buildMessage(update.Callback.Message.ID, update.Callback.Message.Chat.ID, sender, interlocutor, code)
 	if e.IsNonNil(err) {
 		return err.PushStack()
 	}

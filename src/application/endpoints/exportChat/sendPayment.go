@@ -2,16 +2,15 @@ package exportchat
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	shared "github.com/ChatDetectiveORG/command-handler/src/application/endpoints"
 	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/postgresql"
-	cdredis "github.com/ChatDetectiveORG/command-handler/src/infrastructure/redis"
 	paymentservice "github.com/ChatDetectiveORG/payment-service"
 	e "github.com/ChatDetectiveORG/shared/errors"
 	h "github.com/ChatDetectiveORG/shared/handlers"
 	models "github.com/ChatDetectiveORG/shared/postgresModels"
+	"github.com/ChatDetectiveORG/shared/utils"
 
 	tele "gopkg.in/telebot.v4"
 )
@@ -29,38 +28,33 @@ func NewRestoreChatEndpoint() h.Endpoint {
 	return ep
 }
 
-// extractMetaID strips the unique prefix and the "\n" separator that UniqueCallback expects.
-func extractMetaID(callbackData string) string {
-	rest := strings.TrimPrefix(callbackData, shared.UniqueRestoreChat)
-	rest = strings.TrimPrefix(rest, "\n")
-	return rest
-}
-
 func runRestoreChat(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
-	cb := update.Callback
-	if cb == nil {
+	if update.Callback == nil {
 		return e.NewError("missing callback", "restore_chat requires callback").WithSeverity(e.Notice)
 	}
 
-	metaID := extractMetaID(cb.Data)
-	if metaID == "" {
-		return hashe.EmitCallback(shared.OutgoingRoutingKey, cb, shared.AnswerCallbackBanner("Кнопка устарела, попробуйте снова из списка чатов.", cb))
-	}
-
-	var meta restoreCallbackMeta
-	if err := cdredis.LoadCallbackMeta(metaID, &meta); e.IsNonNil(err) {
-		return hashe.EmitCallback(shared.OutgoingRoutingKey, cb, shared.AnswerCallbackBanner("Кнопка устарела, попробуйте снова из списка чатов.", cb))
-	}
-
 	db := postgresql.GetDB()
-	sender, err := shared.GetUserByTgID(db, cb.Sender.ID)
+	sender, err := shared.GetUserByTgID(db, update.Callback.Sender.ID)
 	if e.IsNonNil(err) {
 		return err.PushStack()
 	}
 
+	data := utils.ParseCallbackData(update.Callback.Data)
+	code, ok := data[shared.CallbackFieldCode]
+	if !ok {
+		return hashe.EmitCallback(shared.OutgoingRoutingKey, update.Callback, shared.AnswerCallbackBanner("Кнопка устарела, попробуйте снова из списка чатов.", update.Callback))
+	}
+
 	interlocutor := &models.Telegramuser{}
-	if eRaw := db.Model(interlocutor).Where("referral_code = ?", meta.InterlocutorCode).Select(); e.IsNonNil(eRaw) {
+	if eRaw := db.Model(interlocutor).Where("referral_code = ?", code).Select(); e.IsNonNil(eRaw) {
 		return e.FromError(eRaw, "failed to load interlocutor by referral code").WithSeverity(e.Notice)
+	}
+
+	err = checkCallbackPermission(sender, interlocutor, db)
+	if e.IsNonNil(err) {
+		err = hashe.EmitCallback(shared.OutgoingRoutingKey, update.Callback, shared.AnswerCallbackBanner("У вас нет доступа к этой странице", update.Callback))
+
+		return err
 	}
 
 	count, err := chatMessageCount(db, sender, interlocutor)
@@ -68,23 +62,15 @@ func runRestoreChat(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo
 		return err.PushStack()
 	}
 	if count <= 0 {
-		return hashe.EmitCallback(shared.OutgoingRoutingKey, cb, shared.AnswerCallbackBanner("В этом чате нет сообщений для восстановления.", cb))
+		return hashe.EmitCallback(shared.OutgoingRoutingKey, update.Callback, shared.AnswerCallbackBanner("В этом чате нет сообщений для восстановления.", update.Callback))
 	}
-
-	// acquired, err := cdredis.AcquireExportLock(sender.IDHash)
-	// if e.IsNonNil(err) {
-	// 	return err.PushStack()
-	// }
-	// if !acquired {
-	// 	return hashe.EmitCallback(shared.OutgoingRoutingKey, cb, shared.AnswerCallbackBanner("У тебя уже идёт экспорт, дождись его завершения.", cb))
-	// }
 
 	paymentType := paymentservice.PaymentTypeExportChat
 	emitErr, _ := paymentservice.EmitPayment(&paymentType, &paymentservice.PaymentOpts{
 		MirrorID: hashe.MirrorID(),
 		Recipient: &paymentservice.PaymentRecipientOpts{
-			TelegramUserID: cb.Sender.ID,
-			ChatID:         cb.Message.Chat.ID,
+			TelegramUserID: update.Callback.Sender.ID,
+			ChatID:         update.Callback.Message.Chat.ID,
 		},
 		Invoice: &paymentservice.PaymentInvoiceOpts{
 			Title:       "Восстановление чата",
@@ -93,9 +79,9 @@ func runRestoreChat(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo
 		},
 		ExportChat: &paymentservice.ExportChatOpts{
 			Messages:         count,
-			InterlocutorCode: meta.InterlocutorCode,
+			InterlocutorCode: code,
 			SenderIDHash:     sender.IDHash,
-			StatusChatID:     cb.Message.Chat.ID,
+			StatusChatID:     update.Callback.Message.Chat.ID,
 		},
 	})
 	if e.IsNonNil(emitErr) {
@@ -104,7 +90,7 @@ func runRestoreChat(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo
 		return emitErr.PushStack()
 	}
 
-	if err := hashe.EmitCallback(shared.OutgoingRoutingKey, cb, shared.AnswerCallbackBanner("Счёт отправлен, оплатите его для запуска восстановления.", cb)); e.IsNonNil(err) {
+	if err := hashe.EmitCallback(shared.OutgoingRoutingKey, update.Callback, shared.AnswerCallbackBanner("Счёт отправлен, оплатите его для запуска восстановления.", update.Callback)); e.IsNonNil(err) {
 		return err.PushStack()
 	}
 	return e.Nil()
