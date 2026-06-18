@@ -47,7 +47,7 @@ func buildMessage() *telegram.MessageBuilder {
 	mb.WriteString("👉", telegram.TextFormat{Type: telegram.Link}.WithCustomEmojiID("5463392464314315076")).WriteString(
 		"Как подключить бота?\n\nСмотрите видео выше или следуйте этим шагам:\n\n1. Зайди в настройки Telegram\n2. Перейди в  раздел \"Telegram для бизнеса\"\n3. Выбери пункт \"Чат-боты\", и в строке поиска введи ",
 	).WriteString(
-		"@ChatDetectiveBot", telegram.TextFormat{Type: telegram.TextFormatTypeMention},
+		"@ChatDetectiveBot",
 	).WriteString(
 		"\n4. Нажми на кнопку \"добавить\"",
 	)
