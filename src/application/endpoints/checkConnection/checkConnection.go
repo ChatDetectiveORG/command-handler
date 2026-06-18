@@ -3,8 +3,9 @@ package checkconnection
 import (
 	"time"
 
-	shared "github.com/ChatDetectiveORG/command-handler/src/application/endpoints"
 	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/postgresql"
+	helpers "github.com/ChatDetectiveORG/shared/commandHandlerUtils"
+	constants "github.com/ChatDetectiveORG/shared/constants"
 	e "github.com/ChatDetectiveORG/shared/errors"
 	h "github.com/ChatDetectiveORG/shared/handlers"
 	"github.com/ChatDetectiveORG/shared/telegram"
@@ -22,7 +23,7 @@ func NewCheckConnectionEndpoint() h.Endpoint {
 		),
 		h.Or(
 			h.Command([]string{"check_connection"}),
-			h.TextCommand(shared.BtnCheckConnection),
+			h.TextCommand(constants.BtnCheckConnection),
 		),
 	)
 	return ep
@@ -37,21 +38,21 @@ func buildConnectedMessage(chatID int64) *tele.Message {
 	messageBuilder := telegram.MessageBuilder{Mdv2Enabled: true}
 
 	messageBuilder.WriteString(
-		"Бот подключен, все работает как надо!", telegram.TextFormat{Type: telegram.TextFormatTypeBold},
+		"Бот подключен, все работает как надо!", telegram.TextFormat{Type: telegram.Bold},
 	).WriteString(
-		"👌",  telegram.TextFormat{Type: telegram.TextFormatTypeLink}.WithCustomEmojiID("5463423955014529788"),
+		"👌", telegram.TextFormat{Type: telegram.Link}.WithCustomEmojiID("5463423955014529788"),
 	).WriteString(
 		"\n\nТеперь:\n",
 	).WriteString(
-		"👍", telegram.TextFormat{Type: telegram.TextFormatTypeLink}.WithCustomEmojiID("5465465194056525619"),
+		"👍", telegram.TextFormat{Type: telegram.Link}.WithCustomEmojiID("5465465194056525619"),
 	).WriteString(
 		"Ты будешь получать уведомления, если кто-то удалит или изменит сообщения в личных чатах \n",
 	).WriteString(
-		"👍", telegram.TextFormat{Type: telegram.TextFormatTypeLink}.WithCustomEmojiID("5465465194056525619"),
+		"👍", telegram.TextFormat{Type: telegram.Link}.WithCustomEmojiID("5465465194056525619"),
 	).WriteString(
 		"Ты сможешь скачивать фото, видео, голосовые сообщения и кружочки которые обычно исчезают после одного просмотра\n",
 	).WriteString(
-		"👍", telegram.TextFormat{Type: telegram.TextFormatTypeLink}.WithCustomEmojiID("5465465194056525619"),
+		"👍", telegram.TextFormat{Type: telegram.Link}.WithCustomEmojiID("5465465194056525619"),
 	).WriteString(
 		"У тебя будет возможность восстановить чат даже после его удаления \n\nВ общем, полный контроль над собеседником!",
 	)
@@ -66,14 +67,14 @@ func buildConnectedMessage(chatID int64) *tele.Message {
 // Returns: message
 func buildDisconnectedMessage(chatID int64) *tele.Message {
 	messageBuilder := telegram.MessageBuilder{Mdv2Enabled: true}
-	
+
 	messageBuilder.WriteString(
-		"Бот отключён!", telegram.TextFormat{Type: telegram.TextFormatTypeBold},
+		"Бот отключён!", telegram.TextFormat{Type: telegram.Bold},
 	).WriteString(
-		"🙈", telegram.TextFormat{Type: telegram.TextFormatTypeLink}.WithCustomEmojiID("5463345378587849154"),
+		"🙈", telegram.TextFormat{Type: telegram.Link}.WithCustomEmojiID("5463345378587849154"),
 	).WriteString(
 		"\n\nБольшая часть функций недоступна. Бот будет работать только в тех чатах, где собеседник использует ",
-	).WriteString(shared.BotUsername)
+	).WriteString(constants.BotUsername)
 
 	return messageBuilder.Build(chatID)
 }
@@ -82,16 +83,16 @@ func run(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 	db := postgresql.GetDB()
 	chatID := update.Message.Chat.ID
 
-	user, err := shared.GetUserByTgID(db, update.Message.Sender.ID)
+	user, err := helpers.GetUserByTgID(db, update.Message.Sender.ID)
 	if e.IsNonNil(err) {
 		return err
 	}
 
 	if user.BusinessConnectionIDHash != "" {
-		return hashe.WithParseMode(true).Emit(shared.OutgoingRoutingKey, buildConnectedMessage(chatID))
+		return hashe.WithParseMode(true).Emit(constants.OutgoingRoutingKey, buildConnectedMessage(chatID))
 	}
 
-	if err := hashe.WithParseMode(true).Emit(shared.OutgoingRoutingKey, buildDisconnectedMessage(chatID)); e.IsNonNil(err) {
+	if err := hashe.WithParseMode(true).Emit(constants.OutgoingRoutingKey, buildDisconnectedMessage(chatID)); e.IsNonNil(err) {
 		return err
 	}
 

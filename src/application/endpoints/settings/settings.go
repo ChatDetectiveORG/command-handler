@@ -3,10 +3,11 @@ package settings
 import (
 	"time"
 
-	shared "github.com/ChatDetectiveORG/command-handler/src/application/endpoints"
 	e "github.com/ChatDetectiveORG/shared/errors"
 	h "github.com/ChatDetectiveORG/shared/handlers"
 	tele "gopkg.in/telebot.v4"
+
+	constants "github.com/ChatDetectiveORG/shared/constants"
 )
 
 func NewSettingsEndpoint() h.Endpoint {
@@ -19,26 +20,26 @@ func NewSettingsEndpoint() h.Endpoint {
 		),
 		h.Or(
 			h.Command([]string{"settings"}),
-			h.TextCommand(shared.BtnSettings),
+			h.TextCommand(constants.BtnSettings),
 		),
 	)
 	return ep
 }
 
 func NewToggleDeletedEndpoint() h.Endpoint {
-	return newToggleEndpoint(shared.UniqueToggleDeleted, "toggle_deleted", runToggleDeleted)
+	return newToggleEndpoint(constants.UniqueToggleDeleted, "toggle_deleted", runToggleDeleted)
 }
 
 func NewToggleEditedEndpoint() h.Endpoint {
-	return newToggleEndpoint(shared.UniqueToggleEdited, "toggle_edited", runToggleEdited)
+	return newToggleEndpoint(constants.UniqueToggleEdited, "toggle_edited", runToggleEdited)
 }
 
 func NewToggleSelfMediaEndpoint() h.Endpoint {
-	return newToggleEndpoint(shared.UniqueToggleSelfMedia, "toggle_self_media", runToggleSelfMedia)
+	return newToggleEndpoint(constants.UniqueToggleSelfMedia, "toggle_self_media", runToggleSelfMedia)
 }
 
 func NewToggleExtExportEndpoint() h.Endpoint {
-	return newToggleEndpoint(shared.UniqueToggleExtExport, "toggle_ext_export", runToggleExtExport)
+	return newToggleEndpoint(constants.UniqueToggleExtExport, "toggle_ext_export", runToggleExtExport)
 }
 
 func newToggleEndpoint(unique, name string, fn func(tele.Update, *h.HandlerChainHashe) *e.ErrorInfo) h.Endpoint {

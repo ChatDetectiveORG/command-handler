@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	shared "github.com/ChatDetectiveORG/command-handler/src/application/endpoints"
 	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/postgresql"
 	paymentservice "github.com/ChatDetectiveORG/payment-service"
 	e "github.com/ChatDetectiveORG/shared/errors"
@@ -13,6 +12,9 @@ import (
 	"github.com/ChatDetectiveORG/shared/utils"
 
 	tele "gopkg.in/telebot.v4"
+
+	helpers "github.com/ChatDetectiveORG/shared/commandHandlerUtils"
+	constants "github.com/ChatDetectiveORG/shared/constants"
 )
 
 func NewRestoreChatEndpoint() h.Endpoint {
@@ -23,7 +25,7 @@ func NewRestoreChatEndpoint() h.Endpoint {
 			30*time.Second,
 			h.InitChainHandler(runRestoreChat, h.EndOnError),
 		),
-		h.CallbackStartsWith(shared.UniqueRestoreChat),
+		h.CallbackStartsWith(constants.UniqueRestoreChat),
 	)
 	return ep
 }
@@ -34,15 +36,15 @@ func runRestoreChat(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo
 	}
 
 	db := postgresql.GetDB()
-	sender, err := shared.GetUserByTgID(db, update.Callback.Sender.ID)
+	sender, err := helpers.GetUserByTgID(db, update.Callback.Sender.ID)
 	if e.IsNonNil(err) {
 		return err.PushStack()
 	}
 
 	data := utils.ParseCallbackData(update.Callback.Data)
-	code, ok := data[shared.CallbackFieldCode]
+	code, ok := data[constants.CallbackFieldCode]
 	if !ok {
-		return hashe.EmitCallback(shared.OutgoingRoutingKey, update.Callback, shared.AnswerCallbackBanner("Кнопка устарела, попробуйте снова из списка чатов.", update.Callback))
+		return hashe.EmitCallback(constants.OutgoingRoutingKey, update.Callback, helpers.AnswerCallbackBanner("Кнопка устарела, попробуйте снова из списка чатов.", update.Callback))
 	}
 
 	interlocutor := &models.Telegramuser{}
@@ -52,7 +54,7 @@ func runRestoreChat(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo
 
 	err = checkCallbackPermission(sender, interlocutor, db)
 	if e.IsNonNil(err) {
-		err = hashe.EmitCallback(shared.OutgoingRoutingKey, update.Callback, shared.AnswerCallbackBanner("У вас нет доступа к этой странице", update.Callback))
+		err = hashe.EmitCallback(constants.OutgoingRoutingKey, update.Callback, helpers.AnswerCallbackBanner("У вас нет доступа к этой странице", update.Callback))
 
 		return err
 	}
@@ -62,7 +64,7 @@ func runRestoreChat(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo
 		return err.PushStack()
 	}
 	if count <= 0 {
-		return hashe.EmitCallback(shared.OutgoingRoutingKey, update.Callback, shared.AnswerCallbackBanner("В этом чате нет сообщений для восстановления.", update.Callback))
+		return hashe.EmitCallback(constants.OutgoingRoutingKey, update.Callback, helpers.AnswerCallbackBanner("В этом чате нет сообщений для восстановления.", update.Callback))
 	}
 
 	paymentType := paymentservice.PaymentTypeExportChat
@@ -90,7 +92,7 @@ func runRestoreChat(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo
 		return emitErr.PushStack()
 	}
 
-	if err := hashe.EmitCallback(shared.OutgoingRoutingKey, update.Callback, shared.AnswerCallbackBanner("Счёт отправлен, оплатите его для запуска восстановления.", update.Callback)); e.IsNonNil(err) {
+	if err := hashe.EmitCallback(constants.OutgoingRoutingKey, update.Callback, helpers.AnswerCallbackBanner("Счёт отправлен, оплатите его для запуска восстановления.", update.Callback)); e.IsNonNil(err) {
 		return err.PushStack()
 	}
 	return e.Nil()

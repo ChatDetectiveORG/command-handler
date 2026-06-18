@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	shared "github.com/ChatDetectiveORG/command-handler/src/application/endpoints"
 	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/postgresql"
 	paymentservice "github.com/ChatDetectiveORG/payment-service"
 	e "github.com/ChatDetectiveORG/shared/errors"
@@ -14,6 +13,9 @@ import (
 	models "github.com/ChatDetectiveORG/shared/postgresModels"
 	utils "github.com/ChatDetectiveORG/shared/utils"
 	tele "gopkg.in/telebot.v4"
+
+	constants "github.com/ChatDetectiveORG/shared/constants"
+	helpers "github.com/ChatDetectiveORG/shared/commandHandlerUtils" 
 )
 
 func NewReferralEndpoint() h.Endpoint {
@@ -26,7 +28,7 @@ func NewReferralEndpoint() h.Endpoint {
 		),
 		h.Or(
 			h.Command([]string{"ref"}),
-			h.TextCommand(shared.BtnInviteFriend),
+			h.TextCommand(constants.BtnInviteFriend),
 		),
 	)
 	return ep
@@ -40,7 +42,7 @@ func NewBonusSelectEndpoint() h.Endpoint {
 			30*time.Second,
 			h.InitChainHandler(runBonusSelect, h.EndOnError),
 		),
-		h.UniqueCallback(shared.UniqueBonusSelect),
+		h.UniqueCallback(constants.UniqueBonusSelect),
 	)
 	return ep
 }
@@ -53,7 +55,7 @@ func NewBonusDetailsEndpoint() h.Endpoint {
 			30*time.Second,
 			h.InitChainHandler(runBonusDetails, h.EndOnError),
 		),
-		h.UniqueCallback(shared.UniqueBonusDetails),
+		h.UniqueCallback(constants.UniqueBonusDetails),
 	)
 	return ep
 }
@@ -66,17 +68,17 @@ func NewBonusBackEndpoint() h.Endpoint {
 			30*time.Second,
 			h.InitChainHandler(runBonusBack, h.EndOnError),
 		),
-		h.UniqueCallback(shared.UniqueBonusBack),
+		h.UniqueCallback(constants.UniqueBonusBack),
 	)
 	return ep
 }
 
 func NewBonusMoneyEndpoint() h.Endpoint {
-	return newBonusTypeEndpoint(shared.UniqueBonusMoney, "bonus_money", models.ReferralBonusMoney)
+	return newBonusTypeEndpoint(constants.UniqueBonusMoney, "bonus_money", models.ReferralBonusMoney)
 }
 
 func NewBonusLevelsEndpoint() h.Endpoint {
-	return newBonusTypeEndpoint(shared.UniqueBonusLevels, "bonus_levels", models.ReferralBonusLevels)
+	return newBonusTypeEndpoint(constants.UniqueBonusLevels, "bonus_levels", models.ReferralBonusLevels)
 }
 
 func newBonusTypeEndpoint(unique, name, bonusType string) h.Endpoint {
@@ -100,7 +102,7 @@ func NewWhatLevelsEndpoint() h.Endpoint {
 			30*time.Second,
 			h.InitChainHandler(runWhatLevels, h.EndOnError),
 		),
-		h.UniqueCallback(shared.UniqueWhatLevels),
+		h.UniqueCallback(constants.UniqueWhatLevels),
 	)
 	return ep
 }
@@ -113,7 +115,7 @@ func NewUpgradeLevelEndpoint() h.Endpoint {
 			3*time.Minute,
 			h.InitChainHandler(runUpgradeLevel, h.EndOnError),
 		),
-		h.UniqueCallback(shared.UniqueUpgradeLevel),
+		h.UniqueCallback(constants.UniqueUpgradeLevel),
 	)
 	return ep
 }
@@ -128,7 +130,7 @@ func NewUpgradeLevelCommandEndpoint() h.Endpoint {
 		),
 		h.Or(
 			h.Command([]string{"upgrade"}),
-			h.TextCommand(shared.BtnUpgradeLevel),
+			h.TextCommand(constants.BtnUpgradeLevel),
 		),
 	)
 	return ep
@@ -149,17 +151,17 @@ func NewLevelCommandEndpoint() h.Endpoint {
 
 // buildReferralMessage builds the main referral message for a user.
 func buildReferralMessage(user *models.Telegramuser, chatID int64) *tele.Message {
-	refLink := shared.BuildReferralLink(user)
+	refLink := helpers.BuildReferralLink(user)
 	refLinkOffset := utils.TgLen("Твоя личная реферальная ссылка: ")
 	refLinkLen := utils.TgLen(refLink)
 	handshakeOffset := refLinkOffset + refLinkLen
-	bonusText := fmt.Sprintf("%d рублей за друга (во внутренней валюте бота)", shared.ReferralBonusRub)
+	bonusText := fmt.Sprintf("%d рублей за друга (во внутренней валюте бота)", constants.ReferralBonusRub)
 	bonusEmojiOffset := refLinkOffset + refLinkLen + utils.TgLen(" 🤝\nЗа приглашённых друзей ты можешь получить бонус:\n")
 	crownOffset := refLinkOffset + refLinkLen + utils.TgLen(" 🤝\nЗа приглашённых друзей ты можешь получить бонус:\n"+bonusText+"🛍\nили\nРазличные бонусы в системе (скидки/бесплатные услуги на выбор)")
 
 	text := fmt.Sprintf("Твоя личная реферальная ссылка: %s 🤝\nЗа приглашённых друзей ты можешь получить бонус:\n%d рублей за друга (во внутренней валюте бота)🛍\nили\nРазличные бонусы в системе (скидки/бесплатные услуги на выбор)👑",
 		refLink,
-		shared.ReferralBonusRub,
+		constants.ReferralBonusRub,
 	)
 
 	return &tele.Message{
@@ -168,14 +170,14 @@ func buildReferralMessage(user *models.Telegramuser, chatID int64) *tele.Message
 		Entities: tele.Entities{
 			{Type: tele.EntityURL, Offset: refLinkOffset, Length: refLinkLen},
 			{Type: tele.EntityCustomEmoji, Offset: handshakeOffset + utils.TgLen(" "), Length: 2, CustomEmojiID: "5372957680174384345"},
-			{Type: tele.EntityCustomEmoji, Offset: bonusEmojiOffset + utils.TgLen(fmt.Sprintf("%d рублей за друга (во внутренней валюте бота)", shared.ReferralBonusRub)), Length: 2, CustomEmojiID: "5453901475648390219"},
+			{Type: tele.EntityCustomEmoji, Offset: bonusEmojiOffset + utils.TgLen(fmt.Sprintf("%d рублей за друга (во внутренней валюте бота)", constants.ReferralBonusRub)), Length: 2, CustomEmojiID: "5453901475648390219"},
 			{Type: tele.EntityCustomEmoji, Offset: crownOffset, Length: 2, CustomEmojiID: "5229011542011299168"},
 		},
 		PreviewOptions: &tele.PreviewOptions{Disabled: true},
 		ReplyMarkup: &tele.ReplyMarkup{
 			InlineKeyboard: [][]tele.InlineButton{
-				{{Text: "Выбрать бонус по умолчанию", Data: shared.UniqueBonusSelect}},
-				{{Text: "Подробнее", Data: shared.UniqueBonusDetails}},
+				{{Text: "Выбрать бонус по умолчанию", Data: constants.UniqueBonusSelect}},
+				{{Text: "Подробнее", Data: constants.UniqueBonusDetails}},
 			},
 		},
 	}
@@ -185,12 +187,12 @@ func buildReferralMessage(user *models.Telegramuser, chatID int64) *tele.Message
 func buildBonusSelectionMessage(chatID, msgID int64, currentPref string) *tele.Message {
 	text := fmt.Sprintf(
 		"Выберите бонус за приведённых пользователей:\n⏫%d рублей за каждого пользователя (во внутренней валюте бота)\n⏫Бесплатный уровень за каждых %d приведённых пользователей (приведённые пользователи учитываются системой 6 месяцев после подключения бота, уровни рассчитываются с округлением вниз)",
-		shared.ReferralBonusRub,
-		shared.ReferralBonusThresholdLevels,
+		constants.ReferralBonusRub,
+		constants.ReferralBonusThresholdLevels,
 	)
 
 	arrowOffset1 := utils.TgLen("Выберите бонус за приведённых пользователей:\n")
-	arrowOffset2 := arrowOffset1 + utils.TgLen(fmt.Sprintf("⏫%d рублей за каждого пользователя (во внутренней валюте бота)\n", shared.ReferralBonusRub))
+	arrowOffset2 := arrowOffset1 + utils.TgLen(fmt.Sprintf("⏫%d рублей за каждого пользователя (во внутренней валюте бота)\n", constants.ReferralBonusRub))
 
 	return &tele.Message{
 		ID:   int(msgID),
@@ -208,7 +210,7 @@ func buildBonusKeyboard(currentPref string) *tele.ReplyMarkup {
 	buildBtn := func(label, data string, isSelected bool) tele.InlineButton {
 		btn := tele.InlineButton{Text: label, Data: data}
 		if isSelected {
-			btn.IconCustomEmojiID = shared.EmojiSettingOn
+			btn.IconCustomEmojiID = constants.EmojiSettingOn
 		}
 		return btn
 	}
@@ -216,12 +218,12 @@ func buildBonusKeyboard(currentPref string) *tele.ReplyMarkup {
 	return &tele.ReplyMarkup{
 		InlineKeyboard: [][]tele.InlineButton{
 			{
-				buildBtn("Деньги", shared.UniqueBonusMoney, currentPref == models.ReferralBonusMoney),
-				buildBtn("Уровни", shared.UniqueBonusLevels, currentPref == models.ReferralBonusLevels),
+				buildBtn("Деньги", constants.UniqueBonusMoney, currentPref == models.ReferralBonusMoney),
+				buildBtn("Уровни", constants.UniqueBonusLevels, currentPref == models.ReferralBonusLevels),
 			},
 			{
-				{Text: "Что такое уровни?", Data: shared.UniqueWhatLevels},
-				{Text: "назад", Data: shared.UniqueBonusBack},
+				{Text: "Что такое уровни?", Data: constants.UniqueWhatLevels},
+				{Text: "назад", Data: constants.UniqueBonusBack},
 			},
 		},
 	}
@@ -240,7 +242,7 @@ func buildDetailsMessage(chatID, msgID int64) *tele.Message {
 		},
 		ReplyMarkup: &tele.ReplyMarkup{
 			InlineKeyboard: [][]tele.InlineButton{
-				{{Text: "назад", Data: shared.UniqueBonusBack}},
+				{{Text: "назад", Data: constants.UniqueBonusBack}},
 			},
 		},
 	}
@@ -294,7 +296,7 @@ func buildWhatLevelsMessage(level models.LevelSummary, isAdmin bool, chatID int6
 		},
 		ReplyMarkup: &tele.ReplyMarkup{
 			InlineKeyboard: [][]tele.InlineButton{
-				{{Text: "Повысить уровень", Data: shared.UniqueUpgradeLevel}},
+				{{Text: "Повысить уровень", Data: constants.UniqueUpgradeLevel}},
 			},
 		},
 	}
@@ -319,7 +321,7 @@ func buildLevelCommandMessage(level models.LevelSummary, chatID int64) *tele.Mes
 		),
 		ReplyMarkup: &tele.ReplyMarkup{
 			InlineKeyboard: [][]tele.InlineButton{
-				{{Text: "Об уровнях", Data: shared.UniqueWhatLevels}},
+				{{Text: "Об уровнях", Data: constants.UniqueWhatLevels}},
 			},
 		},
 	}
@@ -327,16 +329,16 @@ func buildLevelCommandMessage(level models.LevelSummary, chatID int64) *tele.Mes
 
 func runReferral(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 	db := postgresql.GetDB()
-	user, err := shared.GetUserByTgID(db, update.Message.Sender.ID)
+	user, err := helpers.GetUserByTgID(db, update.Message.Sender.ID)
 	if e.IsNonNil(err) {
 		return err
 	}
-	return hashe.Emit(shared.OutgoingRoutingKey, buildReferralMessage(user, update.Message.Chat.ID))
+	return hashe.Emit(constants.OutgoingRoutingKey, buildReferralMessage(user, update.Message.Chat.ID))
 }
 
 func runBonusSelect(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 	db := postgresql.GetDB()
-	user, settings, err := shared.GetUserByTgIDWithSettings(db, update.Callback.Sender.ID)
+	user, settings, err := helpers.GetUserByTgIDWithSettings(db, update.Callback.Sender.ID)
 	if e.IsNonNil(err) {
 		return err
 	}
@@ -347,10 +349,10 @@ func runBonusSelect(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo
 		int64(update.Callback.Message.ID),
 		settings.ReferralBonusPreference,
 	)
-	if err := hashe.EmitEditMessage(shared.OutgoingRoutingKey, msg); e.IsNonNil(err) {
+	if err := hashe.EmitEditMessage(constants.OutgoingRoutingKey, msg); e.IsNonNil(err) {
 		return err
 	}
-	return hashe.EmitCallback(shared.OutgoingRoutingKey, update.Callback, shared.AnswerCallbackBanner("", update.Callback))
+	return hashe.EmitCallback(constants.OutgoingRoutingKey, update.Callback, helpers.AnswerCallbackBanner("", update.Callback))
 }
 
 func runBonusDetails(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
@@ -358,15 +360,15 @@ func runBonusDetails(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInf
 		update.Callback.Message.Chat.ID,
 		int64(update.Callback.Message.ID),
 	)
-	if err := hashe.EmitEditMessage(shared.OutgoingRoutingKey, msg); e.IsNonNil(err) {
+	if err := hashe.EmitEditMessage(constants.OutgoingRoutingKey, msg); e.IsNonNil(err) {
 		return err
 	}
-	return hashe.EmitCallback(shared.OutgoingRoutingKey, update.Callback, shared.AnswerCallbackBanner("", update.Callback))
+	return hashe.EmitCallback(constants.OutgoingRoutingKey, update.Callback, helpers.AnswerCallbackBanner("", update.Callback))
 }
 
 func runBonusBack(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 	db := postgresql.GetDB()
-	user, err := shared.GetUserByTgID(db, update.Callback.Sender.ID)
+	user, err := helpers.GetUserByTgID(db, update.Callback.Sender.ID)
 	if e.IsNonNil(err) {
 		return err
 	}
@@ -377,16 +379,16 @@ func runBonusBack(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 	refMsg := buildReferralMessage(user, chatID)
 	refMsg.ID = int(msgID)
 
-	if err := hashe.EmitEditMessage(shared.OutgoingRoutingKey, refMsg); e.IsNonNil(err) {
+	if err := hashe.EmitEditMessage(constants.OutgoingRoutingKey, refMsg); e.IsNonNil(err) {
 		return err
 	}
-	return hashe.EmitCallback(shared.OutgoingRoutingKey, update.Callback, shared.AnswerCallbackBanner("", update.Callback))
+	return hashe.EmitCallback(constants.OutgoingRoutingKey, update.Callback, helpers.AnswerCallbackBanner("", update.Callback))
 }
 
 func makeBonusTypeHandler(bonusType string) func(tele.Update, *h.HandlerChainHashe) *e.ErrorInfo {
 	return func(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 		db := postgresql.GetDB()
-		user, settings, err := shared.GetUserByTgIDWithSettings(db, update.Callback.Sender.ID)
+		user, settings, err := helpers.GetUserByTgIDWithSettings(db, update.Callback.Sender.ID)
 		if e.IsNonNil(err) {
 			return err
 		}
@@ -394,7 +396,7 @@ func makeBonusTypeHandler(bonusType string) func(tele.Update, *h.HandlerChainHas
 
 		if settings.ReferralBonusPreference == bonusType {
 			// Already selected — just acknowledge.
-			return hashe.EmitCallback(shared.OutgoingRoutingKey, update.Callback, shared.AnswerCallbackBanner("", update.Callback))
+			return hashe.EmitCallback(constants.OutgoingRoutingKey, update.Callback, helpers.AnswerCallbackBanner("", update.Callback))
 		}
 
 		settings.ReferralBonusPreference = bonusType
@@ -408,16 +410,16 @@ func makeBonusTypeHandler(bonusType string) func(tele.Update, *h.HandlerChainHas
 			int64(update.Callback.Message.ID),
 			bonusType,
 		)
-		if err := hashe.EmitEditMessage(shared.OutgoingRoutingKey, msg); e.IsNonNil(err) {
+		if err := hashe.EmitEditMessage(constants.OutgoingRoutingKey, msg); e.IsNonNil(err) {
 			return err
 		}
-		return hashe.EmitCallback(shared.OutgoingRoutingKey, update.Callback, shared.AnswerCallbackBanner("", update.Callback))
+		return hashe.EmitCallback(constants.OutgoingRoutingKey, update.Callback, helpers.AnswerCallbackBanner("", update.Callback))
 	}
 }
 
 func runWhatLevels(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 	db := postgresql.GetDB()
-	user, err := shared.GetUserByTgID(db, update.Callback.Sender.ID)
+	user, err := helpers.GetUserByTgID(db, update.Callback.Sender.ID)
 	if e.IsNonNil(err) {
 		return err
 	}
@@ -432,17 +434,17 @@ func runWhatLevels(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo 
 	}
 
 	msg := buildWhatLevelsMessage(level, isAdmin, update.Callback.Message.Chat.ID)
-	if err := hashe.Emit(shared.OutgoingRoutingKey, msg); e.IsNonNil(err) {
+	if err := hashe.Emit(constants.OutgoingRoutingKey, msg); e.IsNonNil(err) {
 		return err
 	}
-	return hashe.EmitCallback(shared.OutgoingRoutingKey, update.Callback, shared.AnswerCallbackBanner("", update.Callback))
+	return hashe.EmitCallback(constants.OutgoingRoutingKey, update.Callback, helpers.AnswerCallbackBanner("", update.Callback))
 }
 
 func runUpgradeLevel(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 	if err := hashe.EmitCallback(
-		shared.OutgoingRoutingKey,
+		constants.OutgoingRoutingKey,
 		update.Callback,
-		shared.AnswerCallbackBanner("Отправляю счёт", update.Callback),
+		helpers.AnswerCallbackBanner("Отправляю счёт", update.Callback),
 	); e.IsNonNil(err) {
 		return err
 	}
@@ -455,7 +457,7 @@ func runUpgradeLevelCommand(update tele.Update, hashe *h.HandlerChainHashe) *e.E
 	if strings.HasPrefix(update.Message.Text, "/upgrade") {
 		parsedLevels, err := parseUpgradeLevels(update.Message.Text)
 		if e.IsNonNil(err) {
-			return hashe.Emit(shared.OutgoingRoutingKey, buildUpgradeUsageMessage(update.Message.Chat.ID))
+			return hashe.Emit(constants.OutgoingRoutingKey, buildUpgradeUsageMessage(update.Message.Chat.ID))
 		}
 		levels = parsedLevels
 	}
@@ -464,7 +466,7 @@ func runUpgradeLevelCommand(update tele.Update, hashe *h.HandlerChainHashe) *e.E
 
 func runLevelCommand(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 	db := postgresql.GetDB()
-	user, err := shared.GetUserByTgID(db, update.Message.Sender.ID)
+	user, err := helpers.GetUserByTgID(db, update.Message.Sender.ID)
 	if e.IsNonNil(err) {
 		return err
 	}
@@ -474,7 +476,7 @@ func runLevelCommand(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInf
 		return err
 	}
 
-	return hashe.Emit(shared.OutgoingRoutingKey, buildLevelCommandMessage(level, update.Message.Chat.ID))
+	return hashe.Emit(constants.OutgoingRoutingKey, buildLevelCommandMessage(level, update.Message.Chat.ID))
 }
 
 func parseUpgradeLevels(text string) (int, *e.ErrorInfo) {
@@ -507,7 +509,7 @@ func emitLevelInvoice(tgUserID int64, chatID int64, levels int, hashe *h.Handler
 	if e.IsNonNil(err) {
 		return err
 	}
-	return hashe.Emit(shared.OutgoingRoutingKey, buildUpgradeInvoiceSentMessage(chatID, levels))
+	return hashe.Emit(constants.OutgoingRoutingKey, buildUpgradeInvoiceSentMessage(chatID, levels))
 }
 
 func buildUpgradeUsageMessage(chatID int64) *tele.Message {

@@ -4,7 +4,6 @@ import (
 	"strconv"
 	"time"
 
-	shared "github.com/ChatDetectiveORG/command-handler/src/application/endpoints"
 	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/postgresql"
 	e "github.com/ChatDetectiveORG/shared/errors"
 	h "github.com/ChatDetectiveORG/shared/handlers"
@@ -13,6 +12,9 @@ import (
 	"github.com/ChatDetectiveORG/shared/utils"
 
 	tele "gopkg.in/telebot.v4"
+
+	helpers "github.com/ChatDetectiveORG/shared/commandHandlerUtils"
+	constants "github.com/ChatDetectiveORG/shared/constants"
 )
 
 func NewViewChatEndpoint() h.Endpoint {
@@ -23,7 +25,7 @@ func NewViewChatEndpoint() h.Endpoint {
 			30*time.Second,
 			h.InitChainHandler(runViewChat, h.EndOnError),
 		),
-		h.CallbackStartsWith(shared.UniqueGoToChat),
+		h.CallbackStartsWith(constants.UniqueGoToChat),
 	)
 	return ep
 }
@@ -50,27 +52,27 @@ func buildMessage(messageID int, chatID int64, sender *models.Telegramuser, inte
 	messageBuilder := telegram.MessageBuilder{Mdv2Enabled: true}
 
 	messageBuilder.WriteString(
-		"Чат с ", telegram.TextFormat{Type: telegram.TextFormatTypeBold},
+		"Чат с ", telegram.TextFormat{Type: telegram.Bold},
 	).WriteString(
-		fullName, telegram.TextFormat{Type: telegram.TextFormatTypeLink}.WithUserMention(tgID), telegram.TextFormat{Type: telegram.TextFormatTypeBold},
+		fullName, telegram.TextFormat{Type: telegram.Link}.WithUserMention(tgID), telegram.TextFormat{Type: telegram.Bold},
 	).WriteString("\n")
-	
+
 	if count > 0 {
 		messageBuilder.WriteString(
-			"Возможно восстановить " + strconv.Itoa(count) + " сообщений", telegram.TextFormat{Type: telegram.TextFormatTypeItalic},
+			"Возможно восстановить "+strconv.Itoa(count)+" сообщений", telegram.TextFormat{Type: telegram.Italic},
 		)
 	} else {
 		messageBuilder.WriteString(
-			"К сожалению, чат не может быть восстановлен.", telegram.TextFormat{Type: telegram.TextFormatTypeItalic},	
+			"К сожалению, чат не может быть восстановлен.", telegram.TextFormat{Type: telegram.Italic},
 		).WriteString(
-			"Почему?", telegram.TextFormat{Type: telegram.TextFormatTypeLink, URL: "https://t.me/chatdetective_support/1210"},
+			"Почему?", telegram.TextFormat{Type: telegram.Link, URL: "https://t.me/chatdetective_support/1210"},
 		)
 	}
 
-	messageBuilder.AddButton(tele.InlineButton{Text: "Назад", Data: shared.UniqueChatSelectPage})
+	messageBuilder.AddButton(tele.InlineButton{Text: "Назад", Data: constants.UniqueChatSelectPage})
 	messageBuilder.NextRow()
 	if count > 0 {
-		messageBuilder.AddButton(tele.InlineButton{Text: "Восстановить", Data: utils.DumpCallbackData(shared.UniqueRestoreChat, map[string]any{"interlocutor_code": code})})
+		messageBuilder.AddButton(tele.InlineButton{Text: "Восстановить", Data: utils.DumpCallbackData(constants.UniqueRestoreChat, map[string]any{constants.CallbackFieldCode: code})})
 	}
 
 	return messageBuilder.WithMessageID(messageID).Build(chatID), e.Nil()
@@ -82,13 +84,13 @@ func runViewChat(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 	}
 
 	db := postgresql.GetDB()
-	sender, err := shared.GetUserByTgID(db, update.Callback.Sender.ID)
+	sender, err := helpers.GetUserByTgID(db, update.Callback.Sender.ID)
 	if e.IsNonNil(err) {
 		return err.PushStack()
 	}
 
 	parsedData := utils.ParseCallbackData(update.Callback.Data)
-	code := parsedData[shared.CallbackFieldCode]
+	code := parsedData[constants.CallbackFieldCode]
 	if code == "" {
 		return e.NewError("missing interlocutor code", "callback data has no chat code").WithSeverity(e.Notice)
 	}
@@ -100,7 +102,7 @@ func runViewChat(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 
 	err = checkCallbackPermission(sender, interlocutor, db)
 	if e.IsNonNil(err) {
-		err = hashe.EmitCallback(shared.OutgoingRoutingKey, update.Callback, shared.AnswerCallbackBanner("У вас нет доступа к этой странице", update.Callback))
+		err = hashe.EmitCallback(constants.OutgoingRoutingKey, update.Callback, helpers.AnswerCallbackBanner("У вас нет доступа к этой странице", update.Callback))
 
 		return err
 	}
@@ -111,8 +113,8 @@ func runViewChat(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 	}
 
 	hashe = hashe.WithParseMode(true)
-	if err := hashe.EmitEditMessage(shared.OutgoingRoutingKey, msg); e.IsNonNil(err) {
+	if err := hashe.EmitEditMessage(constants.OutgoingRoutingKey, msg); e.IsNonNil(err) {
 		return err.PushStack()
 	}
-	return hashe.EmitCallback(shared.OutgoingRoutingKey, update.Callback, shared.AnswerCallbackBanner("", update.Callback))
+	return hashe.EmitCallback(constants.OutgoingRoutingKey, update.Callback, helpers.AnswerCallbackBanner("", update.Callback))
 }

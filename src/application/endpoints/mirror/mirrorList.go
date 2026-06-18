@@ -5,13 +5,15 @@ import (
 	"fmt"
 	"time"
 
-	shared "github.com/ChatDetectiveORG/command-handler/src/application/endpoints"
 	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/postgresql"
 	paymentservice "github.com/ChatDetectiveORG/payment-service"
 	e "github.com/ChatDetectiveORG/shared/errors"
 	h "github.com/ChatDetectiveORG/shared/handlers"
 	models "github.com/ChatDetectiveORG/shared/postgresModels"
 	tele "gopkg.in/telebot.v4"
+
+	constants "github.com/ChatDetectiveORG/shared/constants"
+	helpers "github.com/ChatDetectiveORG/shared/commandHandlerUtils"
 )
 
 func NewMirrorListEndpoint() h.Endpoint {
@@ -23,7 +25,7 @@ func NewMirrorListEndpoint() h.Endpoint {
 			h.InitChainHandler(runMirrorList, h.EndOnError),
 		),
 		h.Or(
-			h.UniqueCallback(shared.UniqueMirrorList),
+			h.UniqueCallback(constants.UniqueMirrorList),
 			h.Command([]string{"mirrors"}),
 		),
 	)
@@ -32,7 +34,7 @@ func NewMirrorListEndpoint() h.Endpoint {
 
 func buildMirrorsKeyboard(senderID int64) (*tele.ReplyMarkup, *e.ErrorInfo) {
 	db := postgresql.GetDB()
-	user, err := shared.GetUserByTgID(db, senderID)
+	user, err := helpers.GetUserByTgID(db, senderID)
 	if e.IsNonNil(err) {
 		return &tele.ReplyMarkup{}, err
 	}
@@ -43,9 +45,9 @@ func buildMirrorsKeyboard(senderID int64) (*tele.ReplyMarkup, *e.ErrorInfo) {
 	}
 
 	buildMirrorButton := func(mirror *models.Mirror) []tele.InlineButton {
-		statusIconID := shared.EmojiMirrorActive
+		statusIconID := constants.EmojiMirrorActive
 		if mirror.Status != models.MirrorStatusActive {
-			statusIconID = shared.EmojiMirrorInactive
+			statusIconID = constants.EmojiMirrorInactive
 		}
 
 		var costsText string = "Free"
@@ -70,7 +72,7 @@ func buildMirrorsKeyboard(senderID int64) (*tele.ReplyMarkup, *e.ErrorInfo) {
 
 		return []tele.InlineButton{{
 			Text:              fmt.Sprintf("%s [%s]", mirror.BotUsername, costsText),
-			Data:              shared.UniqueMirrorDetails + string(data),
+			Data:              constants.UniqueMirrorDetails + string(data),
 			IconCustomEmojiID: statusIconID,
 		}}
 	}
@@ -119,8 +121,8 @@ func runMirrorList(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo 
 	}
 
 	if update.Callback != nil {
-		return hashe.WithParseMode(true).EmitEditMessage(shared.OutgoingRoutingKey, message)
+		return hashe.WithParseMode(true).EmitEditMessage(constants.OutgoingRoutingKey, message)
 	}
 
-	return hashe.WithParseMode(true).Emit(shared.OutgoingRoutingKey, message)
+	return hashe.WithParseMode(true).Emit(constants.OutgoingRoutingKey, message)
 }

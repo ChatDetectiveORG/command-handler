@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	shared "github.com/ChatDetectiveORG/command-handler/src/application/endpoints"
 	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/postgresql"
 	paymentservice "github.com/ChatDetectiveORG/payment-service"
 	e "github.com/ChatDetectiveORG/shared/errors"
@@ -16,6 +15,8 @@ import (
 	redisInfra "github.com/ChatDetectiveORG/command-handler/src/infrastructure/redis"
 
 	tele "gopkg.in/telebot.v4"
+
+	constants "github.com/ChatDetectiveORG/shared/constants"
 )
 
 func NewMirrorInfoEndpoint() h.Endpoint {
@@ -26,7 +27,7 @@ func NewMirrorInfoEndpoint() h.Endpoint {
 			30*time.Second,
 			h.InitChainHandler(runMirrorInfo, h.EndOnError),
 		),
-		h.UniqueCallback(shared.UniqueMirrorDetails),
+		h.UniqueCallback(constants.UniqueMirrorDetails),
 	)
 	return ep
 }
@@ -35,10 +36,10 @@ func buildMirrorInfoKeyboard() *tele.ReplyMarkup {
 	keyboard := [][]tele.InlineButton{
 		{{
 			Text: "Удалить зеркало",
-			Data: shared.UniqueMirrorDelete,
+			Data: constants.UniqueMirrorDelete,
 		}}, {{
 			Text: "К списку зеркал",
-			Data: shared.UniqueMirrorList,
+			Data: constants.UniqueMirrorList,
 		}},
 	}
 
@@ -84,7 +85,7 @@ func runMirrorInfo(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo 
 	}
 
 	var callbackData map[string]any
-	err := e.Wrap(json.Unmarshal([]byte(strings.TrimPrefix(update.Callback.Data, shared.UniqueMirrorDetails)), &callbackData))
+	err := e.Wrap(json.Unmarshal([]byte(strings.TrimPrefix(update.Callback.Data, constants.UniqueMirrorDetails)), &callbackData))
 	if e.IsNonNil(err) {
 		return err
 	}
@@ -121,7 +122,7 @@ func runMirrorInfo(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo 
 		return e.Wrap(eRaw)
 	}
 
-	return hashe.WithParseMode(true).EmitEditMessage(shared.OutgoingRoutingKey, msg)
+	return hashe.WithParseMode(true).EmitEditMessage(constants.OutgoingRoutingKey, msg)
 }
 
 func formatMirrorViewHash(chatID int64) string {

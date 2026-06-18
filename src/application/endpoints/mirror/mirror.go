@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	shared "github.com/ChatDetectiveORG/command-handler/src/application/endpoints"
 	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/postgresql"
 	redisinfra "github.com/ChatDetectiveORG/command-handler/src/infrastructure/redis"
 	paymentservice "github.com/ChatDetectiveORG/payment-service"
@@ -19,6 +18,9 @@ import (
 	"github.com/gomodule/redigo/redis"
 	"github.com/google/uuid"
 	tele "gopkg.in/telebot.v4"
+
+	constants "github.com/ChatDetectiveORG/shared/constants"
+	helpers "github.com/ChatDetectiveORG/shared/commandHandlerUtils"
 )
 
 const (
@@ -63,15 +65,15 @@ func runCreateMirror(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInf
 	
 	log.Printf("update.Message.Sender.IsPremium: %v", update.Message.Sender.IsPremium)
 	if update.Message.Sender.IsPremium == true {
-		return hashe.Emit(shared.OutgoingRoutingKey, buildInstructionMessage(update.Message))
+		return hashe.Emit(constants.OutgoingRoutingKey, buildInstructionMessage(update.Message))
 	}
 
-	err := hashe.Emit(shared.OutgoingRoutingKey, buildInstructionMessage(update.Message))
+	err := hashe.Emit(constants.OutgoingRoutingKey, buildInstructionMessage(update.Message))
 	if e.IsNonNil(err) {
 		return err
 	}
 
-	err = hashe.Emit(shared.OutgoingRoutingKey, buildNonPremiumUserWarningMessage(update.Message.Chat.ID))
+	err = hashe.Emit(constants.OutgoingRoutingKey, buildNonPremiumUserWarningMessage(update.Message.Chat.ID))
 	return err
 }
 
@@ -95,10 +97,10 @@ func runMirrorToken(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo
 		if err := clearWaitingForToken(update.Message.Chat.ID); e.IsNonNil(err) {
 			return err
 		}
-		return hashe.Emit(shared.OutgoingRoutingKey, textMessage(update.Message.Chat.ID, "Создание зеркала отменено."))
+		return hashe.Emit(constants.OutgoingRoutingKey, textMessage(update.Message.Chat.ID, "Создание зеркала отменено."))
 	}
 	if !tokenFormat.MatchString(text) {
-		return hashe.Emit(shared.OutgoingRoutingKey, textMessage(update.Message.Chat.ID, "Токен должен выглядеть так: 1234567890:ABCdEFgHIjKLmNoPQRstUVwXyZ123456789\n\nНе удалось проверить токен. Отправьте его ещё раз или введите /cancel."))
+		return hashe.Emit(constants.OutgoingRoutingKey, textMessage(update.Message.Chat.ID, "Токен должен выглядеть так: 1234567890:ABCdEFgHIjKLmNoPQRstUVwXyZ123456789\n\nНе удалось проверить токен. Отправьте его ещё раз или введите /cancel."))
 	}
 
 	if err := clearWaitingForToken(update.Message.Chat.ID); e.IsNonNil(err) {
@@ -110,14 +112,14 @@ func runMirrorToken(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo
 func createMirrorFromToken(update tele.Update, hashe *h.HandlerChainHashe, token string) *e.ErrorInfo {
 	bot, rawErr := tele.NewBot(tele.Settings{Token: token, Poller: nil})
 	if rawErr != nil {
-		return hashe.Emit(shared.OutgoingRoutingKey, textMessage(update.Message.Chat.ID, "Не удалось проверить токен. Проверьте его и отправьте команду /create_mirror ещё раз."))
+		return hashe.Emit(constants.OutgoingRoutingKey, textMessage(update.Message.Chat.ID, "Не удалось проверить токен. Проверьте его и отправьте команду /create_mirror ещё раз."))
 	}
 	if bot.Me == nil || !bot.Me.CanConnectToBusiness {
-		return hashe.Emit(shared.OutgoingRoutingKey, textMessage(update.Message.Chat.ID, "У этого бота не включён Бизнес-режим. Включите его в @BotFather и попробуйте снова."))
+		return hashe.Emit(constants.OutgoingRoutingKey, textMessage(update.Message.Chat.ID, "У этого бота не включён Бизнес-режим. Включите его в @BotFather и попробуйте снова."))
 	}
 
 	db := postgresql.GetDB()
-	owner, err := shared.GetUserByTgID(db, update.Message.Sender.ID)
+	owner, err := helpers.GetUserByTgID(db, update.Message.Sender.ID)
 	if e.IsNonNil(err) {
 		return err
 	}
@@ -143,13 +145,13 @@ func createMirrorFromToken(update tele.Update, hashe *h.HandlerChainHashe, token
 	if err := setMirrorWebhook(bot, unique); e.IsNonNil(err) {
 		return err
 	}
-	err = hashe.Emit(shared.OutgoingRoutingKey, buildSuccessMessage(update.Message.Chat.ID, bot.Me.Username))
+	err = hashe.Emit(constants.OutgoingRoutingKey, buildSuccessMessage(update.Message.Chat.ID, bot.Me.Username))
 	if e.IsNonNil(err) {
 		return err
 	}
 
 	if update.Message.Sender.IsPremium == false {
-		return hashe.Emit(shared.OutgoingRoutingKey, buildNonPremiumUserWarningMessage(update.Message.Chat.ID))
+		return hashe.Emit(constants.OutgoingRoutingKey, buildNonPremiumUserWarningMessage(update.Message.Chat.ID))
 	}
 
 	return e.Nil()
@@ -173,7 +175,7 @@ func emitMirrorPayment(update tele.Update, hashe *h.HandlerChainHashe, mirrorID 
 	if e.IsNonNil(err) {
 		return err
 	}
-	return hashe.Emit(shared.OutgoingRoutingKey, textMessage(update.Message.Chat.ID, "Бесплатный лимит зеркал исчерпан. Отправил счёт на ежемесячную доплату."))
+	return hashe.Emit(constants.OutgoingRoutingKey, textMessage(update.Message.Chat.ID, "Бесплатный лимит зеркал исчерпан. Отправил счёт на ежемесячную доплату."))
 }
 
 func setMirrorWebhook(bot *tele.Bot, unique string) *e.ErrorInfo {
@@ -254,7 +256,7 @@ func buildNonPremiumUserWarningMessage(chatID int64) *tele.Message {
 
 func buildSuccessMessage(chatID int64, botUsername string) *tele.Message {
 	botMention := "@" + botUsername
-	text := fmt.Sprintf("Зеркало успешно создано!👉\n\nОно функционирует точно так же, как и %s.\nЕсли он не будет использоваться больше месяца, то %s будет отключён от системы", shared.BotUsername, botMention)
+	text := fmt.Sprintf("Зеркало успешно создано!👉\n\nОно функционирует точно так же, как и %s.\nЕсли он не будет использоваться больше месяца, то %s будет отключён от системы", constants.BotUsername, botMention)
 	return &tele.Message{
 		Chat: &tele.Chat{ID: chatID},
 		Text: text,

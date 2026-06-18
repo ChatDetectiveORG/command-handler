@@ -4,7 +4,6 @@ import (
 	"strings"
 	"time"
 
-	shared "github.com/ChatDetectiveORG/command-handler/src/application/endpoints"
 	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/postgresql"
 	e "github.com/ChatDetectiveORG/shared/errors"
 	h "github.com/ChatDetectiveORG/shared/handlers"
@@ -13,6 +12,8 @@ import (
 	redisInfra "github.com/ChatDetectiveORG/command-handler/src/infrastructure/redis"
 
 	models "github.com/ChatDetectiveORG/shared/postgresModels"
+
+	constants "github.com/ChatDetectiveORG/shared/constants"
 )
 
 func NewMirrorDeleteEndpoint() h.Endpoint {
@@ -24,9 +25,9 @@ func NewMirrorDeleteEndpoint() h.Endpoint {
 			h.InitChainHandler(runNewMirrorDelete, h.EndOnError),
 		),
 		h.Or(
-			h.UniqueCallback(shared.UniqueMirrorDelete),
-			h.UniqueCallback(shared.UniqueMirrorDeleteConfirm),
-			h.UniqueCallback(shared.UniqueMirrorDeleteCancel),
+			h.UniqueCallback(constants.UniqueMirrorDelete),
+			h.UniqueCallback(constants.UniqueMirrorDeleteConfirm),
+			h.UniqueCallback(constants.UniqueMirrorDeleteCancel),
 		),
 	)
 	return ep
@@ -39,12 +40,12 @@ func askApprovement(chatID int64, messageID int, hashe *h.HandlerChainHashe) *e.
 		Text: "Вы уверены, что хотите удалить зеркало?",
 		ReplyMarkup: &tele.ReplyMarkup{
 			InlineKeyboard: [][]tele.InlineButton{
-				{{Text: "Да", Data: shared.UniqueMirrorDeleteConfirm}, {Text: "Нет", Data: shared.UniqueMirrorDeleteCancel}},
+				{{Text: "Да", Data: constants.UniqueMirrorDeleteConfirm}, {Text: "Нет", Data: constants.UniqueMirrorDeleteCancel}},
 			},
 		},
 	}
 
-	return hashe.EmitEditMessage(shared.OutgoingRoutingKey, &message)
+	return hashe.EmitEditMessage(constants.OutgoingRoutingKey, &message)
 }
 
 func mirrorDeleteCancel(chatID int64, messageID int, hashe *h.HandlerChainHashe) *e.ErrorInfo {
@@ -54,12 +55,12 @@ func mirrorDeleteCancel(chatID int64, messageID int, hashe *h.HandlerChainHashe)
 		Text: "Зеркало не будет удалено",
 		ReplyMarkup: &tele.ReplyMarkup{
 			InlineKeyboard: [][]tele.InlineButton{
-				{{Text: "К списку зеркал", Data: shared.UniqueMirrorList}},
+				{{Text: "К списку зеркал", Data: constants.UniqueMirrorList}},
 			},
 		},
 	}
 
-	return hashe.EmitEditMessage(shared.OutgoingRoutingKey, &message)
+	return hashe.EmitEditMessage(constants.OutgoingRoutingKey, &message)
 }
 
 func mirrorDeleteConfirm(chatID int64, messageID int, hashe *h.HandlerChainHashe) *e.ErrorInfo {
@@ -98,24 +99,24 @@ func mirrorDeleteConfirm(chatID int64, messageID int, hashe *h.HandlerChainHashe
 		Text: "Зеркало успешно удалено",
 		ReplyMarkup: &tele.ReplyMarkup{
 			InlineKeyboard: [][]tele.InlineButton{
-				{{Text: "К списку зеркал", Data: shared.UniqueMirrorList}},
+				{{Text: "К списку зеркал", Data: constants.UniqueMirrorList}},
 			},
 		},
 	}
 
-	return hashe.EmitEditMessage(shared.OutgoingRoutingKey, &message)
+	return hashe.EmitEditMessage(constants.OutgoingRoutingKey, &message)
 }
 
 func runNewMirrorDelete(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {	
-	if strings.HasPrefix(update.Callback.Data, shared.UniqueMirrorDeleteConfirm) {
+	if strings.HasPrefix(update.Callback.Data, constants.UniqueMirrorDeleteConfirm) {
 		return mirrorDeleteConfirm(update.Callback.Message.Chat.ID, update.Callback.Message.ID, hashe)
 	}
 
-	if strings.HasPrefix(update.Callback.Data, shared.UniqueMirrorDeleteCancel) {
+	if strings.HasPrefix(update.Callback.Data, constants.UniqueMirrorDeleteCancel) {
 		return mirrorDeleteCancel(update.Callback.Message.Chat.ID, update.Callback.Message.ID, hashe)
 	}
 
-	if strings.HasPrefix(update.Callback.Data, shared.UniqueMirrorDelete) {
+	if strings.HasPrefix(update.Callback.Data, constants.UniqueMirrorDelete) {
 		return askApprovement(update.Callback.Message.Chat.ID, update.Callback.Message.ID, hashe)
 	}
 

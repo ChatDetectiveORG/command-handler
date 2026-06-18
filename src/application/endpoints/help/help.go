@@ -3,10 +3,12 @@ package help
 import (
 	"time"
 
-	shared "github.com/ChatDetectiveORG/command-handler/src/application/endpoints"
 	e "github.com/ChatDetectiveORG/shared/errors"
 	h "github.com/ChatDetectiveORG/shared/handlers"
+	"github.com/ChatDetectiveORG/shared/telegram"
 	tele "gopkg.in/telebot.v4"
+
+	constants "github.com/ChatDetectiveORG/shared/constants"
 )
 
 func NewHelpEndpoint() h.Endpoint {
@@ -23,19 +25,21 @@ func NewHelpEndpoint() h.Endpoint {
 }
 
 func run(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
-	msg := &tele.Message{
-		Chat: &tele.Chat{ID: update.Message.Chat.ID},
-		Text: "🔓Что умеет этот бот?\n\nСписок команд:\n😵 /bug — Сообщить о проблеме\n🙈/check_connection — Проверить подключение\n🛍/ref — Реферальная программа\n\nПоддержка бота: @ChatDetectiveSupport",
-		Entities: tele.Entities{
-			{Type: tele.EntityCustomEmoji, Offset: 0, Length: 2, CustomEmojiID: "5465443379917629504"},
-			{Type: tele.EntityCustomEmoji, Offset: 38, Length: 2, CustomEmojiID: "5465265370703080100"},
-			{Type: tele.EntityCommand, Offset: 41, Length: 4},
-			{Type: tele.EntityCustomEmoji, Offset: 68, Length: 2, CustomEmojiID: "5463345378587849154"},
-			{Type: tele.EntityCommand, Offset: 70, Length: 17},
-			{Type: tele.EntityCustomEmoji, Offset: 112, Length: 2, CustomEmojiID: "5453901475648390219"},
-			{Type: tele.EntityCommand, Offset: 114, Length: 4},
-			{Type: tele.EntityMention, Offset: 160, Length: 21},
-		},
-	}
-	return hashe.Emit(shared.OutgoingRoutingKey, msg)
+	chatID := update.Message.Chat.ID
+
+	mb := telegram.MessageBuilder{Mdv2Enabled: true}
+
+	mb.WriteString("Что умеет этот бот?", telegram.TextFormat{Type: telegram.Bold}).
+		WriteString("\n\nСписок основных команд:\n").
+		WriteString("/check_connection", telegram.TextFormat{Type: telegram.Mono}).
+		WriteString(" — проверить подключение\n").
+		WriteString("/ref", telegram.TextFormat{Type: telegram.Mono}).
+		WriteString(" — реферальная программа\n").
+		WriteString("/export", telegram.TextFormat{Type: telegram.Mono}).
+		WriteString(" — экспорт чата\n").
+		WriteString("/delete_data", telegram.TextFormat{Type: telegram.Mono}).
+		WriteString(" — удалить данные\n\n").
+		WriteString("Не нашли ответ, хотите задать вопрос или сообщить о проблеме? Загляните в @ChatDetectiveSupport.")
+
+	return hashe.Emit(constants.OutgoingRoutingKey, mb.Build(chatID))
 }

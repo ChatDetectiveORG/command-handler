@@ -3,7 +3,6 @@ package deletedata
 import (
 	"time"
 
-	shared "github.com/ChatDetectiveORG/command-handler/src/application/endpoints"
 	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/postgresql"
 	e "github.com/ChatDetectiveORG/shared/errors"
 	h "github.com/ChatDetectiveORG/shared/handlers"
@@ -11,6 +10,9 @@ import (
 	"github.com/ChatDetectiveORG/shared/telegram"
 	"github.com/go-pg/pg/v10"
 	tele "gopkg.in/telebot.v4"
+
+	helpers "github.com/ChatDetectiveORG/shared/commandHandlerUtils"
+	constants "github.com/ChatDetectiveORG/shared/constants"
 )
 
 func NewDeleteDataEndpoint() h.Endpoint {
@@ -21,7 +23,7 @@ func NewDeleteDataEndpoint() h.Endpoint {
 			30*time.Second,
 			h.InitChainHandler(runDeleteData, h.EndOnError),
 		),
-		h.Command([]string{"deleteData"}),
+		h.Or(h.Command([]string{"delete_data"}), h.TextCommand("Удалить данные")),
 	)
 	return ep
 }
@@ -34,7 +36,7 @@ func NewDeleteConfirmEndpoint() h.Endpoint {
 			2*time.Minute,
 			h.InitChainHandler(runDeleteConfirm, h.EndOnError),
 		),
-		h.UniqueCallback(shared.UniqueDeleteConfirm),
+		h.UniqueCallback(constants.UniqueDeleteConfirm),
 	)
 	return ep
 }
@@ -47,7 +49,7 @@ func NewDeleteCancelEndpoint() h.Endpoint {
 			30*time.Second,
 			h.InitChainHandler(runDeleteCancel, h.EndOnError),
 		),
-		h.UniqueCallback(shared.UniqueDeleteCancel),
+		h.UniqueCallback(constants.UniqueDeleteCancel),
 	)
 	return ep
 }
@@ -56,29 +58,29 @@ func NewDeleteCancelEndpoint() h.Endpoint {
 func buildWarningMessage(chatID int64) *tele.Message {
 	messageBuilder := telegram.MessageBuilder{Mdv2Enabled: true}
 	messageBuilder.WriteString(
-		"⚠️", telegram.TextFormat{Type: telegram.TextFormatTypeLink}.WithCustomEmojiID("5395358455768837479"),
+		"⚠️", telegram.TextFormat{Type: telegram.Link}.WithCustomEmojiID("5395358455768837479"),
 	).WriteString(
-		"ВНИМАНИЕ", telegram.TextFormat{Type: telegram.TextFormatTypeBold},
+		"ВНИМАНИЕ", telegram.TextFormat{Type: telegram.Bold},
 	).WriteString(
-		"⚠️", telegram.TextFormat{Type: telegram.TextFormatTypeLink}.WithCustomEmojiID("5395358455768837479"),
+		"⚠️", telegram.TextFormat{Type: telegram.Link}.WithCustomEmojiID("5395358455768837479"),
 	).WriteString(
 		"\nУдаление данных сотрёт всю информацию о вас с наших серверов, включая совершённые транзакции. Это значит, что вы ",
 	).WriteString(
-		"НЕ", telegram.TextFormat{Type: telegram.TextFormatTypeBold},
+		"НЕ", telegram.TextFormat{Type: telegram.Bold},
 	).WriteString(
 		" сможете восстановить свои чаты в случае их удаления и совершённые покупки.\n\n",
 	).WriteString(
-		"Это действие нельзя отменить. Вы уверены, что хотите стереть все данные?", telegram.TextFormat{Type: telegram.TextFormatTypeItalic},
+		"Это действие нельзя отменить. Вы уверены, что хотите стереть все данные?", telegram.TextFormat{Type: telegram.Italic},
 	)
 
-	messageBuilder.AddButton(tele.InlineButton{Text: "Нет!", Data: shared.UniqueDeleteCancel})
-	messageBuilder.AddButton(tele.InlineButton{Text: "Да.", Data: shared.UniqueDeleteConfirm})
+	messageBuilder.AddButton(tele.InlineButton{Text: "Нет!", Data: constants.UniqueDeleteCancel})
+	messageBuilder.AddButton(tele.InlineButton{Text: "Да.", Data: constants.UniqueDeleteConfirm})
 
 	return messageBuilder.Build(chatID)
 }
 
 func runDeleteData(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
-	return hashe.Emit(shared.OutgoingRoutingKey, buildWarningMessage(update.Message.Chat.ID))
+	return hashe.WithParseMode(true).Emit(constants.OutgoingRoutingKey, buildWarningMessage(update.Message.Chat.ID))
 }
 
 // Sends message about data deletion cancellation
@@ -87,14 +89,14 @@ func runDeleteCancel(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInf
 		ID:   update.Callback.Message.ID,
 		Chat: update.Callback.Message.Chat,
 	}
-	if err := hashe.EmitDeleteMessage(shared.OutgoingRoutingKey, deleteMsg); e.IsNonNil(err) {
+	if err := hashe.EmitDeleteMessage(constants.OutgoingRoutingKey, deleteMsg); e.IsNonNil(err) {
 		return err
 	}
 
 	return hashe.EmitCallback(
-		shared.OutgoingRoutingKey,
+		constants.OutgoingRoutingKey,
 		update.Callback,
-		shared.AnswerCallbackBanner("Данные не будут удалены", update.Callback),
+		helpers.AnswerCallbackBanner("Данные не будут удалены", update.Callback),
 	)
 }
 
@@ -107,7 +109,7 @@ func runDeleteConfirm(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorIn
 	db := postgresql.GetDB()
 	tgUserID := update.Callback.Sender.ID
 
-	user, err := shared.GetUserByTgID(db, tgUserID)
+	user, err := helpers.GetUserByTgID(db, tgUserID)
 	if e.IsNonNil(err) {
 		return err
 	}
@@ -159,7 +161,7 @@ func runDeleteConfirm(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorIn
 	_, _ = tx.Model((*models.Payment)(nil)).
 		Where("client_id = ?", user.ID).
 		Delete()
-	
+
 	// Delete referrals
 	_, _ = tx.Model((*models.Referral)(nil)).
 		WhereOr("invitor_id = ?", user.ID).
@@ -177,11 +179,11 @@ func runDeleteConfirm(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorIn
 		ID:   update.Callback.Message.ID,
 		Chat: update.Callback.Message.Chat,
 	}
-	_ = hashe.EmitDeleteMessage(shared.OutgoingRoutingKey, deleteMsg)
+	_ = hashe.EmitDeleteMessage(constants.OutgoingRoutingKey, deleteMsg)
 
 	return hashe.EmitCallback(
-		shared.OutgoingRoutingKey,
+		constants.OutgoingRoutingKey,
 		update.Callback,
-		shared.AnswerCallbackBanner("Данные удалены успешно!", update.Callback),
+		helpers.AnswerCallbackBanner("Данные удалены успешно!", update.Callback),
 	)
 }

@@ -3,17 +3,18 @@ package businessconnection
 import (
 	"errors"
 	"math"
-	"slices"
 	"strconv"
 	"time"
 
-	shared "github.com/ChatDetectiveORG/command-handler/src/application/endpoints"
 	e "github.com/ChatDetectiveORG/shared/errors"
 	h "github.com/ChatDetectiveORG/shared/handlers"
 	models "github.com/ChatDetectiveORG/shared/postgresModels"
 	"github.com/ChatDetectiveORG/shared/telegram"
 	"github.com/go-pg/pg/v10"
 	tele "gopkg.in/telebot.v4"
+
+	constants "github.com/ChatDetectiveORG/shared/constants"
+	levelmanagement "github.com/ChatDetectiveORG/shared/levelManagement"
 )
 
 // Gets used link owner and referral relation between users
@@ -63,9 +64,9 @@ func updateReferral(db *pg.DB, actor *models.Telegramuser, connected bool) *e.Er
 
 	switch invitor.Settings.ReferralBonusPreference {
 	case models.ReferralBonusMoney:
-		referral.FixedMoneyReward = shared.ReferralBonusRub
+		referral.FixedMoneyReward = constants.ReferralBonusRub
 	case models.ReferralBonusLevels:
-		referral.ActualUntil = time.Now().Add(time.Duration(shared.ReferralLevelsDurationSec) * time.Second)
+		referral.ActualUntil = time.Now().Add(time.Duration(constants.ReferralLevelsDurationSec) * time.Second)
 	}
 
 	referral.UpdatedAt = time.Now()
@@ -95,69 +96,6 @@ func updateReferral(db *pg.DB, actor *models.Telegramuser, connected bool) *e.Er
 	return e.Nil()
 }
 
-// Takes non-considered yet referral relations and adds new bonus levels accoardingly to the current threshold
-// Old levels stay untouched even if threshold risen
-// Takes: transaction, untracked relations (referrals that were not considered yet), level recipient user ID
-// Returns: number of levels added, error
-func recountLevels(tx *pg.Tx, untrackedRalations []models.Referral, levelRecipientUserID []byte) (int, *e.ErrorInfo) {
-	var levelsAdded int
-	threshold := shared.ReferralBonusThresholdLevels
-	now := time.Now()
-	defaultBonusEnd := now.Add(time.Duration(shared.ReferralLevelsDurationSec) * time.Second).Unix()
-
-	for i := 0; i+threshold <= len(untrackedRalations); i += threshold {
-		addedRelationsDurations := make([]int64, 0, threshold)
-		addedRelationsIDs := make([]int, 0, threshold)
-
-		for j := i; j < i+threshold; j++ {
-			ref := untrackedRalations[j]
-			u := ref.ActualUntil.Unix()
-			if ref.ActualUntil.IsZero() || u <= 0 {
-				u = defaultBonusEnd
-			}
-			addedRelationsDurations = append(addedRelationsDurations, u)
-			addedRelationsIDs = append(addedRelationsIDs, ref.ID)
-		}
-
-		newLevel := models.UserLevels{
-			LinkedUserID:      levelRecipientUserID,
-			CreatedAt:         time.Now(),
-			UpdatedAt:         time.Now(),
-			Level:             shared.ReferralBonusLevelsPerUnlock,
-			UntilTimestamp:    slices.Min(addedRelationsDurations),
-			IsReferralBonus:   true,
-			LinkedReferralIDs: addedRelationsIDs,
-		}
-
-		_, eRaw := tx.Model(&newLevel).Insert()
-		if e.IsNonNil(eRaw) {
-			return levelsAdded, e.Wrap(eRaw)
-		}
-
-		levelsAdded += 1
-	}
-
-	return levelsAdded, e.Nil()
-}
-
-// Gets untracked relations (referrals that were not considered yet)
-// Takes: transaction, invitor user ID, referral
-// Returns: untracked relations, error
-func getUntrackedRelations(tx *pg.Tx, invitorID []byte, referral *models.Referral) ([]models.Referral, *e.ErrorInfo) {
-	var untrackedRalations []models.Referral
-	err := e.Wrap(tx.Model(&untrackedRalations).
-		Where("invitor_id = ?", invitorID).
-		Where("id NOT IN (SELECT unnest(linked_referral_ids) FROM user_levels WHERE linked_user_id = ?)", invitorID).
-		Order("actual_until ASC").
-		Select(),
-	)
-	if e.IsNonNil(err) {
-		return nil, err
-	}
-
-	return untrackedRalations, e.Nil()
-}
-
 // Handles levels bonus for invitor (adds or removes levels based on connected status)
 // Takes: transaction, referral, message builder, connected (true if invited user connected bot)
 // Returns: error
@@ -176,7 +114,7 @@ func handleLevels(tx *pg.Tx, referral *models.Referral, messageBuilder *telegram
 		return e.NewError("referral already considered", "referral already considered").WithSeverity(e.Ingnored)
 	}
 
-	untrackedRalations, err := getUntrackedRelations(tx, invitorID, referral)
+	untrackedRalations, err := levelmanagement.GetUntrackedRelations(tx, invitorID)
 	if e.IsNonNil(err) {
 		return err
 	}
@@ -207,7 +145,7 @@ func handleLevels(tx *pg.Tx, referral *models.Referral, messageBuilder *telegram
 		}
 	}
 
-	levelsAdded, err := recountLevels(tx, untrackedRalations, invitorID)
+	levelsAdded, err := levelmanagement.RecountLevels(tx, untrackedRalations, invitorID)
 	if e.IsNonNil(err) {
 		return err
 	}
@@ -215,7 +153,7 @@ func handleLevels(tx *pg.Tx, referral *models.Referral, messageBuilder *telegram
 	if levelsAdded == 0 {
 		messageBuilder.WriteString(
 			"🚫",
-			telegram.TextFormat{Type: telegram.TextFormatTypeLink}.WithCustomEmojiID("5462882007451185227"),
+			telegram.TextFormat{Type: telegram.Link}.WithCustomEmojiID("5462882007451185227"),
 		).WriteString("Твой уровень снижен на 1.\n").WriteString(
 			"Сейчас он составляет: " + strconv.Itoa(levelSummary.Level),
 		)
@@ -226,10 +164,9 @@ func handleLevels(tx *pg.Tx, referral *models.Referral, messageBuilder *telegram
 	messageBuilder.WriteString(
 		"Твой уровень сейчас составляет " + strconv.Itoa(levelSummary.Level+levelsAdded) + "\n\n",
 	).WriteString(
-		"Ты получил " + strconv.Itoa(levelsAdded) + " уровней\nПриведи " + 
-		strconv.Itoa(shared.ReferralBonusThresholdLevels-(len(untrackedRalations)-levelsAdded*shared.ReferralBonusThresholdLevels)) + 
-		" пользователей чтобы получить ещё один бонусный уровень!",
-
+		"Ты получил " + strconv.Itoa(levelsAdded) + " уровней\nПриведи " +
+			strconv.Itoa(constants.ReferralBonusThresholdLevels-(len(untrackedRalations)-levelsAdded*constants.ReferralBonusThresholdLevels)) +
+			" пользователей чтобы получить ещё один бонусный уровень!",
 	)
 
 	return e.Nil()
@@ -240,22 +177,22 @@ func handleLevels(tx *pg.Tx, referral *models.Referral, messageBuilder *telegram
 func handleMoney(messageBuilder *telegram.MessageBuilder, connected bool) {
 	if connected {
 		messageBuilder.WriteString(
-			"🔥", telegram.TextFormat{Type: telegram.TextFormatTypeLink}.WithCustomEmojiID("5256047523620995497"),
+			"🔥", telegram.TextFormat{Type: telegram.Link}.WithCustomEmojiID("5256047523620995497"),
 		).WriteString(
 			"Если он не будет отключать бота до ",
 		).WriteString(
-			time.Now().Add(time.Duration(shared.ReferralDiscountDurationSec)*time.Second + time.Hour*24).Format("02.01.2006"),
-		).WriteString(" ты получишь " + strconv.FormatInt(shared.ReferralBonusRub, 10) + " рублей на внутренний счёт бота")
+			time.Now().Add(time.Duration(constants.ReferralDiscountDurationSec)*time.Second + time.Hour*24).Format("02.01.2006"),
+		).WriteString(" ты получишь " + strconv.FormatInt(constants.ReferralBonusRub, 10) + " рублей на внутренний счёт бота")
 
 		return
 	}
 
 	messageBuilder.WriteString(
-		"🚫", telegram.TextFormat{Type: telegram.TextFormatTypeLink}.WithCustomEmojiID("5462882007451185227"),
+		"🚫", telegram.TextFormat{Type: telegram.Link}.WithCustomEmojiID("5462882007451185227"),
 	).WriteString("Ты не получишь выплат за него\n").WriteString(
 		"Чтобы получить денги за него, он должен подключить бота и пользоваться им без перерыва в течение ",
 	).WriteString(
-		strconv.FormatFloat(math.Ceil(float64(time.Duration(shared.ReferralDiscountDurationSec).Hours()/24)), 'f', -1, 64) + " дней",
+		strconv.FormatFloat(math.Ceil(float64(time.Duration(constants.ReferralDiscountDurationSec).Hours()/24)), 'f', -1, 64) + " дней",
 	)
 }
 
@@ -278,7 +215,7 @@ func sendReferral(db *pg.DB, actor *models.Telegramuser, hashe *h.HandlerChainHa
 	}
 
 	messageBuilder := telegram.MessageBuilder{Mdv2Enabled: true}
-	messageBuilder.WriteString("🔝", telegram.TextFormat{Type: telegram.TextFormatTypeLink}.WithCustomEmojiID("5463071033256848094"))
+	messageBuilder.WriteString("🔝", telegram.TextFormat{Type: telegram.Link}.WithCustomEmojiID("5463071033256848094"))
 
 	actorFullName, err := actor.GetFullName()
 	if e.IsNonNil(err) {
@@ -289,7 +226,7 @@ func sendReferral(db *pg.DB, actor *models.Telegramuser, hashe *h.HandlerChainHa
 		return err
 	}
 	messageBuilder.WriteString("Пользователь ")
-	messageBuilder.WriteString(actorFullName, telegram.TextFormat{Type: telegram.TextFormatTypeLink}.WithUserMention(actorTgID))
+	messageBuilder.WriteString(actorFullName, telegram.TextFormat{Type: telegram.Link}.WithUserMention(actorTgID))
 
 	if connected {
 		messageBuilder.WriteString(" подключил бота!\n\n")
@@ -324,7 +261,7 @@ func sendReferral(db *pg.DB, actor *models.Telegramuser, hashe *h.HandlerChainHa
 		return e.FromError(eraw, "failed to commit transaction").WithSeverity(e.Critical)
 	}
 
-	return hashe.WithParseMode(true).Emit(shared.OutgoingRoutingKey, messageBuilder.Build(invitorTgID))
+	return hashe.WithParseMode(true).Emit(constants.OutgoingRoutingKey, messageBuilder.Build(invitorTgID))
 }
 
 // Runs all referral functions and sends all needed messages

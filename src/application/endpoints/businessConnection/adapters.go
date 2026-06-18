@@ -4,10 +4,12 @@ import (
 	"time"
 
 	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/postgresql"
+	"github.com/ChatDetectiveORG/shared/constants"
+	e "github.com/ChatDetectiveORG/shared/errors"
 	h "github.com/ChatDetectiveORG/shared/handlers"
 	tele "gopkg.in/telebot.v4"
-	e "github.com/ChatDetectiveORG/shared/errors"
-	shared "github.com/ChatDetectiveORG/command-handler/src/application/endpoints"
+
+	commandhandlerutils "github.com/ChatDetectiveORG/shared/commandHandlerUtils"
 )
 
 // Notify user about cases when bot connected or disconnected
@@ -35,17 +37,17 @@ func run(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 	conn := update.BusinessConnection
 	userChatID := conn.UserChatID
 
-	user, err := shared.GetUserByTgID(db, conn.Sender.ID)
+	user, err := commandhandlerutils.GetUserByTgID(db, conn.Sender.ID)
 	if e.IsNonNil(err) {
 		return err
 	}
 
 	if conn.Enabled {
-		if err := shared.UpdateBusinessConnectionIDHash(db, user, conn.ID); e.IsNonNil(err) {
+		if err := commandhandlerutils.UpdateBusinessConnectionIDHash(db, user, conn.ID); e.IsNonNil(err) {
 			return err
 		}
 
-		if err := hashe.WithParseMode(true).Emit(shared.OutgoingRoutingKey, buildConnectedMessage(userChatID)); e.IsNonNil(err) {
+		if err := hashe.WithParseMode(true).Emit(constants.OutgoingRoutingKey, buildConnectedMessage(userChatID)); e.IsNonNil(err) {
 			return err
 		}
 
@@ -54,12 +56,12 @@ func run(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 			return err
 		}
 	} else {
-		if err := shared.UpdateBusinessConnectionIDHash(db, user, ""); e.IsNonNil(err) {
+		if err := commandhandlerutils.UpdateBusinessConnectionIDHash(db, user, ""); e.IsNonNil(err) {
 			return err
 		}
 
 		disconnectedMsg := buildDisconnectedMessage(userChatID)
-		if err := hashe.WithParseMode(true).Emit(shared.OutgoingRoutingKey, disconnectedMsg); e.IsNonNil(err) {
+		if err := hashe.WithParseMode(true).Emit(constants.OutgoingRoutingKey, disconnectedMsg); e.IsNonNil(err) {
 			return err
 		}
 

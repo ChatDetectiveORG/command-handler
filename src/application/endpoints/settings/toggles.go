@@ -1,19 +1,21 @@
 package settings
 
 import (
-	shared "github.com/ChatDetectiveORG/command-handler/src/application/endpoints"
 	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/postgresql"
 	e "github.com/ChatDetectiveORG/shared/errors"
 	h "github.com/ChatDetectiveORG/shared/handlers"
 	models "github.com/ChatDetectiveORG/shared/postgresModels"
 	tele "gopkg.in/telebot.v4"
+
+	constants "github.com/ChatDetectiveORG/shared/constants"
+	helpers "github.com/ChatDetectiveORG/shared/commandHandlerUtils" 
 )
 
 // settingButton uses official icon_custom_emoji_id (custom pack emoji before label text).
 func settingButton(label string, enabled bool, unique string) tele.InlineButton {
-	iconID := shared.EmojiSettingOff
+	iconID := constants.EmojiSettingOff
 	if enabled {
-		iconID = shared.EmojiSettingOn
+		iconID = constants.EmojiSettingOn
 	}
 	return tele.InlineButton{
 		Text:              label,
@@ -25,10 +27,10 @@ func settingButton(label string, enabled bool, unique string) tele.InlineButton 
 func buildSettingsKeyboard(s *models.UserSettings) *tele.ReplyMarkup {
 	return &tele.ReplyMarkup{
 		InlineKeyboard: [][]tele.InlineButton{
-			{settingButton("Оповещать об удалённых сообщениях", s.NotifyAboutDeletedMessages, shared.UniqueToggleDeleted)},
-			{settingButton("Оповещать об изменённых сообщениях", s.NotifyAboutEditedMessages, shared.UniqueToggleEdited)},
-			{settingButton("Сохранять медиа с 1 просмотром", s.SaveSelfDistructingMedia, shared.UniqueToggleSelfMedia)},
-			{settingButton("Сохранять расширенную переписку*", s.ExtendedChatExport, shared.UniqueToggleExtExport)},
+			{settingButton("Оповещать об удалённых сообщениях", s.NotifyAboutDeletedMessages, constants.UniqueToggleDeleted)},
+			{settingButton("Оповещать об изменённых сообщениях", s.NotifyAboutEditedMessages, constants.UniqueToggleEdited)},
+			{settingButton("Сохранять медиа с 1 просмотром", s.SaveSelfDistructingMedia, constants.UniqueToggleSelfMedia)},
+			{settingButton("Сохранять расширенную переписку*", s.ExtendedChatExport, constants.UniqueToggleExtExport)},
 		},
 	}
 }
@@ -48,19 +50,19 @@ func buildSettingsMessage(chatID int64, msgID int, s *models.UserSettings) *tele
 
 func runShowSettings(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 	db := postgresql.GetDB()
-	user, settings, err := shared.GetUserByTgIDWithSettings(db, update.Message.Sender.ID)
+	user, settings, err := helpers.GetUserByTgIDWithSettings(db, update.Message.Sender.ID)
 	if e.IsNonNil(err) {
 		return err
 	}
 	_ = user
 
 	msg := buildSettingsMessage(update.Message.Chat.ID, 0, settings)
-	return hashe.Emit(shared.OutgoingRoutingKey, msg)
+	return hashe.Emit(constants.OutgoingRoutingKey, msg)
 }
 
 func runToggle(update tele.Update, hashe *h.HandlerChainHashe, toggle func(*models.UserSettings)) *e.ErrorInfo {
 	db := postgresql.GetDB()
-	user, settings, err := shared.GetUserByTgIDWithSettings(db, update.Callback.Sender.ID)
+	user, settings, err := helpers.GetUserByTgIDWithSettings(db, update.Callback.Sender.ID)
 	if e.IsNonNil(err) {
 		return err
 	}
@@ -85,14 +87,14 @@ func runToggle(update tele.Update, hashe *h.HandlerChainHashe, toggle func(*mode
 		update.Callback.Message.ID,
 		settings,
 	)
-	if err := hashe.EmitEditMessage(shared.OutgoingRoutingKey, updatedMsg); e.IsNonNil(err) {
+	if err := hashe.EmitEditMessage(constants.OutgoingRoutingKey, updatedMsg); e.IsNonNil(err) {
 		return err
 	}
 
 	return hashe.EmitCallback(
-		shared.OutgoingRoutingKey,
+		constants.OutgoingRoutingKey,
 		update.Callback,
-		shared.AnswerCallbackBanner("", update.Callback),
+		helpers.AnswerCallbackBanner("", update.Callback),
 	)
 }
 

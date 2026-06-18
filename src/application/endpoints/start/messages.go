@@ -5,7 +5,6 @@ import (
 	"strconv"
 	"strings"
 
-	shared "github.com/ChatDetectiveORG/command-handler/src/application/endpoints"
 	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/postgresql"
 	e "github.com/ChatDetectiveORG/shared/errors"
 	h "github.com/ChatDetectiveORG/shared/handlers"
@@ -13,9 +12,12 @@ import (
 	utils "github.com/ChatDetectiveORG/shared/utils"
 	"github.com/go-pg/pg/v10"
 	tele "gopkg.in/telebot.v4"
+
+	constants "github.com/ChatDetectiveORG/shared/constants"
+	helpers "github.com/ChatDetectiveORG/shared/commandHandlerUtils" 
 )
 
-const showContactsUnique = shared.UniqueShowContacts
+const showContactsUnique = constants.UniqueShowContacts
 
 // exampleUsernameLen is the UTF-16 length of the example username used in the spec:
 // "⊹🍌𝙻𝚒𝚂𝚂𝚒𝙺𝚔🔮⊹" = 20 UTF-16 code units.
@@ -55,14 +57,14 @@ func buildWelcomeMessage(tgUser *tele.User, chatID int64) *tele.Message {
 	return &tele.Message{
 		Chat:     &tele.Chat{ID: chatID},
 		Text:     "Привет, " + firstName + startMessageSuffix,
-		Entities: shared.ShiftEntities(baseStartEntities, delta),
+		Entities: helpers.ShiftEntities(baseStartEntities, delta),
 		ReplyMarkup: &tele.ReplyMarkup{
 			ResizeKeyboard: true,
 			ReplyKeyboard: [][]tele.ReplyButton{
-				{{Text: shared.BtnInstallGuide}, {Text: shared.BtnCheckConnection}},
-				{{Text: shared.BtnSettings}},
-				{{Text: shared.BtnInviteFriend}},
-				{{Text: shared.BtnUpgradeLevel}, {Text: shared.BtnHowEncryption}},
+				{{Text: constants.BtnInstallGuide}, {Text: constants.BtnCheckConnection}},
+				{{Text: constants.BtnSettings}},
+				{{Text: constants.BtnInviteFriend}},
+				{{Text: constants.BtnUpgradeLevel}, {Text: constants.BtnHowEncryption}},
 			},
 		},
 	}
@@ -74,7 +76,7 @@ func buildContactsMessage(user *models.Telegramuser, contacts []*models.Telegram
 		return buildNoContactsMessage(user, chatID)
 	}
 
-	refLink := shared.BuildReferralLink(user)
+	refLink := helpers.BuildReferralLink(user)
 
 	var sb strings.Builder
 	var entities tele.Entities
@@ -114,7 +116,7 @@ func buildContactsMessage(user *models.Telegramuser, contacts []*models.Telegram
 	groupPart := "\n👥Не нашёл здесь того, кого хотел? Пригласи его по реферальной программе и получи "
 	groupEmojiOffset := utils.TgLen(sb.String()) + utils.TgLen("\n")
 	sb.WriteString(groupPart)
-	sb.WriteString(fmt.Sprintf("%d рублей\n", shared.ReferralBonusRub))
+	sb.WriteString(fmt.Sprintf("%d рублей\n", constants.ReferralBonusRub))
 	sb.WriteString("Он получит преимущества использования бота, а ты сможешь просматривать удалённые сообщения в чате с ним")
 
 	handshakeOffset := utils.TgLen(sb.String())
@@ -141,7 +143,7 @@ func buildContactsMessage(user *models.Telegramuser, contacts []*models.Telegram
 }
 
 func buildNoContactsMessage(user *models.Telegramuser, chatID int64) (*tele.Message, *e.ErrorInfo) {
-	refLink := shared.BuildReferralLink(user)
+	refLink := helpers.BuildReferralLink(user)
 
 	var sb strings.Builder
 	var entities tele.Entities
@@ -156,8 +158,8 @@ func buildNoContactsMessage(user *models.Telegramuser, chatID int64) (*tele.Mess
 	})
 
 	mentionOffset := utils.TgLen(sb.String())
-	mentionLen := utils.TgLen(shared.BotUsername)
-	sb.WriteString(shared.BotUsername)
+	mentionLen := utils.TgLen(constants.BotUsername)
+	sb.WriteString(constants.BotUsername)
 	entities = append(entities, tele.MessageEntity{
 		Type:   tele.EntityMention,
 		Offset: mentionOffset,
@@ -168,7 +170,7 @@ func buildNoContactsMessage(user *models.Telegramuser, chatID int64) (*tele.Mess
 
 	groupEmojiOffset := utils.TgLen(sb.String())
 	sb.WriteString("👥Хочешь это исправить? Пригласи друзей по реферальной программе и получи ")
-	sb.WriteString(fmt.Sprintf("%d рублей\n", shared.ReferralBonusRub))
+	sb.WriteString(fmt.Sprintf("%d рублей\n", constants.ReferralBonusRub))
 	sb.WriteString("Они получат преимущества использования бота, а ты сможешь просматривать удалённые сообщения в чате с ними")
 
 	handshakeOffset := utils.TgLen(sb.String())
@@ -278,7 +280,7 @@ func sendMessageToInvitor(invitorUser *models.Telegramuser, startedUser *models.
 		Text: sb.String(),
 	}
 
-	return hash.WithParseMode(true).Emit(shared.OutgoingRoutingKey, message)
+	return hash.WithParseMode(true).Emit(constants.OutgoingRoutingKey, message)
 }
 
 func parseCommandPayload(message *tele.Message) {
@@ -339,7 +341,7 @@ func run(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 		return e.FromError(eraw, "failed to commit transaction").WithSeverity(e.Critical)
 	}
 
-	if err := hashe.Emit(shared.OutgoingRoutingKey, buildWelcomeMessage(tgUser, chatID)); e.IsNonNil(err) {
+	if err := hashe.Emit(constants.OutgoingRoutingKey, buildWelcomeMessage(tgUser, chatID)); e.IsNonNil(err) {
 		return err.PushStack()
 	}
 
@@ -350,19 +352,19 @@ func runShowContacts(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInf
 	db := postgresql.GetDB()
 	chatID := update.Callback.Sender.ID
 
-	user, err := shared.GetUserByTgID(db, chatID)
+	user, err := helpers.GetUserByTgID(db, chatID)
 	if e.IsNonNil(err) {
 		return err.PushStack()
 	}
 
-	relations, err := shared.ContactsForUser(db, user)
+	relations, err := helpers.ContactsForUser(db, user)
 	if e.IsNonNil(err) {
 		return err.PushStack()
 	}
 
 	var contacts []*models.Telegramuser
 	for i := range relations {
-		other := shared.OtherUserInRelation(relations[i], user)
+		other := helpers.OtherUserInRelation(relations[i], user)
 		if other != nil {
 			contacts = append(contacts, other)
 		}
@@ -373,27 +375,27 @@ func runShowContacts(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInf
 		return err.PushStack()
 	}
 
-	if emitErr := hashe.Emit(shared.OutgoingRoutingKey, msg); e.IsNonNil(emitErr) {
+	if emitErr := hashe.Emit(constants.OutgoingRoutingKey, msg); e.IsNonNil(emitErr) {
 		return emitErr
 	}
 
 	return hashe.EmitCallback(
-		shared.OutgoingRoutingKey,
+		constants.OutgoingRoutingKey,
 		update.Callback,
-		shared.AnswerCallbackBanner("", update.Callback),
+		helpers.AnswerCallbackBanner("", update.Callback),
 	)
 }
 
 // GetContactsMessageForUser is exported for reuse in businessConnection and checkConnection handlers.
 func GetContactsMessageForUser(db *pg.DB, user *models.Telegramuser, chatID int64) (*tele.Message, *e.ErrorInfo) {
-	relations, err := shared.ContactsForUser(db, user)
+	relations, err := helpers.ContactsForUser(db, user)
 	if e.IsNonNil(err) {
 		return nil, err
 	}
 
 	var contacts []*models.Telegramuser
 	for i := range relations {
-		other := shared.OtherUserInRelation(relations[i], user)
+		other := helpers.OtherUserInRelation(relations[i], user)
 		if other != nil {
 			contacts = append(contacts, other)
 		}

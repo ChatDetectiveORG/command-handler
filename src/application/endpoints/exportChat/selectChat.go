@@ -3,7 +3,6 @@ package exportchat
 import (
 	"time"
 
-	shared "github.com/ChatDetectiveORG/command-handler/src/application/endpoints"
 	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/postgresql"
 	e "github.com/ChatDetectiveORG/shared/errors"
 	h "github.com/ChatDetectiveORG/shared/handlers"
@@ -13,10 +12,10 @@ import (
 	tele "gopkg.in/telebot.v4"
 
 	cdredis "github.com/ChatDetectiveORG/command-handler/src/infrastructure/redis"
-)
 
-// pageSize is the number of contacts shown per pagination page.
-const pageSize = 7
+	helpers "github.com/ChatDetectiveORG/shared/commandHandlerUtils"
+	constants "github.com/ChatDetectiveORG/shared/constants"
+)
 
 func NewSelectChatEndpoint() h.Endpoint {
 	ep := h.Endpoint{}
@@ -26,7 +25,7 @@ func NewSelectChatEndpoint() h.Endpoint {
 			30*time.Second,
 			h.InitChainHandler(runShowContacts, h.EndOnError),
 		),
-		h.Or(h.Command([]string{"export"}), h.TextCommand("Экспорт чата"), h.CallbackStartsWith(shared.UniqueChatSelectPage)),
+		h.Or(h.Command([]string{"export"}), h.TextCommand("Экспорт чата"), h.CallbackStartsWith(constants.UniqueChatSelectPage)),
 	)
 	return ep
 }
@@ -49,7 +48,7 @@ func runShowContacts(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInf
 		chatID = update.Message.Chat.ID
 	}
 
-	sender, err := shared.GetUserByTgID(db, senderID)
+	sender, err := helpers.GetUserByTgID(db, senderID)
 	if e.IsNonNil(err) {
 		return err.PushStack()
 	}
@@ -76,7 +75,7 @@ func runShowContacts(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInf
 		data,
 		telegram.CreateGenericKeyboardParams{
 			ChatID: chatID,
-			PageUnique: shared.UniqueChatSelectPage,
+			PageUnique: constants.UniqueChatSelectPage,
 			ButtonsPerPage: 7,
 			ButtonsPerRow: 1,
 			ShowNavigation: true,
@@ -85,7 +84,8 @@ func runShowContacts(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInf
 					"userBusinessConnectionIdHash": sender.BusinessConnectionIDHash,
 				},
 				CallbackDataProducer: func(userRefID string) string {
-					return  utils.DumpCallbackData(shared.UniqueGoToChat, map[string]any{shared.CallbackFieldCode: userRefID})
+					res := utils.DumpCallbackData(constants.UniqueGoToChat, map[string]any{constants.CallbackFieldCode: userRefID})
+					return res
 				},
 			},
 		},
@@ -97,12 +97,12 @@ func runShowContacts(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInf
 	}
 
 	if update.Callback == nil {
-		err = hashe.Emit(shared.OutgoingRoutingKey, message)
+		err = hashe.Emit(constants.OutgoingRoutingKey, message)
 
 		return err
 	}
 
-	err = hashe.EmitEditMessage(shared.OutgoingRoutingKey, message)
+	err = hashe.EmitEditMessage(constants.OutgoingRoutingKey, message)
 
 	return err
 }
