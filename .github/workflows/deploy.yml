@@ -32,6 +32,13 @@ jobs:
           path: shared
           token: ${{ secrets.REPO_READ_TOKEN || github.token }}
 
+      - name: Checkout payment-service module
+        uses: actions/checkout@v4
+        with:
+          repository: ChatDetectiveORG/payment-service
+          path: payment-service
+          token: ${{ secrets.REPO_READ_TOKEN || github.token }}
+
       - name: Checkout telebot fork
         uses: actions/checkout@v4
         with:
