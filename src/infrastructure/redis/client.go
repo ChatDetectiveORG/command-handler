@@ -3,11 +3,10 @@ package redis
 import (
 	"time"
 
-	"app/src/infrastructure/config"
+	e "github.com/ChatDetectiveORG/shared/errors"
+	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/config"
 
 	"github.com/gomodule/redigo/redis"
-
-	e "app/pkg/errors"
 )
 
 func newPool(config *config.Config) *redis.Pool {
@@ -23,20 +22,20 @@ func newPool(config *config.Config) *redis.Pool {
 		}
 		opts = append(opts, redis.DialDatabase(config.RedisConfig.Database))
 
-		return redis.Dial("tcp", config.RedisConfig.Host + ":" + config.RedisConfig.Port, opts...)
+		return redis.Dial("tcp", config.RedisConfig.Host+":"+config.RedisConfig.Port, opts...)
 	}
 
 	return &redis.Pool{
 		// MaxIdle: максимальное количество простаивающих (неиспользуемых) соединений в пуле.
-		MaxIdle:     config.RedisConfig.MaxIdle,
+		MaxIdle: config.RedisConfig.MaxIdle,
 		// MaxActive: максимальное количество одновременно открытых (активных) соединений к Redis.
-		MaxActive:   config.RedisConfig.MaxActive,
+		MaxActive: config.RedisConfig.MaxActive,
 		// IdleTimeout: сколько времени соединение может "простаивать" в пуле, прежде чем будет закрыто.
 		IdleTimeout: config.RedisConfig.IdleTimeout,
 		// Wait: если значение true — новые запросы ожидают появления свободного соединения, когда пул переполнен (MaxActive), если false — сразу будет ошибка.
-		Wait:        config.RedisConfig.Wait,
+		Wait: config.RedisConfig.Wait,
 		// Dial: функция, создающая новое соединение с Redis.
-		Dial:        dial,
+		Dial: dial,
 		TestOnBorrow: func(c redis.Conn, t time.Time) error {
 			// Avoid pinging too frequently.
 			if time.Since(t) < 30*time.Second {
@@ -50,9 +49,21 @@ func newPool(config *config.Config) *redis.Pool {
 
 func NewRedisConnection(cfg *config.Config) (redis.Conn, *e.ErrorInfo) {
 	pool, err := GetPool(cfg)
-	if err != nil {
-		return nil, e.FromError(err, "failed to get redis pool")
+	if !err.IsNil() {
+		return nil, err
 	}
 
+	return pool.Get(), e.Nil()
+}
+
+func RedisConn() (redis.Conn, *e.ErrorInfo) {
+	cfg, err := config.FetchConfig()
+	if e.IsNonNil(err) {
+		return nil, err
+	}
+	pool, err := GetPool(cfg)
+	if e.IsNonNil(err) {
+		return nil, err
+	}
 	return pool.Get(), e.Nil()
 }

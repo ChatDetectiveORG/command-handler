@@ -1,24 +1,38 @@
 package main
 
 import (
-	"app/src/application"
-	"app/src/infrastructure/config"
 	"context"
+	"github.com/ChatDetectiveORG/command-handler/src/application"
+	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/config"
+	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/metrics"
+	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/postgresql"
 	"os/signal"
 	"sync"
 	"syscall"
 	"time"
 
-	// "app/src/infrastructure/postgresql"
-	"app/src/infrastructure/rabbitmq"
-	"app/src/infrastructure/redis"
+	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/rabbitmq"
+	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/redis"
+	utils "github.com/ChatDetectiveORG/shared/utils"
 	"log"
 )
 
 func main() {
-	config, _ := config.FetchConfig()
+	config, cfgErr := config.FetchConfig()
+	if !cfgErr.IsNil() {
+		log.Fatal(cfgErr.JSON())
+	}
+	if keyErr := utils.ValidateMasterKeyFromEnv(); !keyErr.IsNil() {
+		log.Fatal(keyErr.JSON())
+	}
 
 	err := rabbitmq.InitRabbitMQ(config, rabbitmq.RequiredModels)
+	if !err.IsNil() {
+		log.Fatal(err.JSON())
+	}
+
+	err = postgresql.InitPostgresql()
+	log.Println("PostgreSQL initialized")
 	if !err.IsNil() {
 		log.Fatal(err.JSON())
 	}
@@ -27,14 +41,12 @@ func main() {
 	if !err.IsNil() {
 		log.Fatal(err.JSON())
 	}
+	log.Println("Redis initialized")
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	err = application.MakeAstatement(config)
-	if !err.IsNil() {
-		log.Fatal(err.JSON())
-	}
+	metrics.Start(ctx, config)
 
 	wg := &sync.WaitGroup{}
 	err = application.ListenToRabbitmq(config, ctx, wg)
@@ -45,11 +57,6 @@ func main() {
 	log.Println("Service started. Waiting for shutdown signal...")
 	<-ctx.Done()
 	log.Println("Shutdown signal received. Exiting...")
-
-	err = application.DeleteMyselfFromRedis(config)
-	if !err.IsNil() {
-		log.Fatal(err.JSON())
-	}
 
 	waitCh := make(chan struct{})
 	go func() {

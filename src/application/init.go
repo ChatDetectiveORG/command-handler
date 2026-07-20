@@ -1,70 +1,111 @@
 package application
 
 import (
-	e "app/pkg/errors"
-	"app/src/infrastructure/config"
-	"app/src/infrastructure/rabbitmq"
-	"app/src/infrastructure/redis"
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
-	"strings"
+	"os"
 	"sync"
-	"time"
 
-	redigo "github.com/gomodule/redigo/redis"
-	tele "gopkg.in/telebot.v4"
+	businessconnection "github.com/ChatDetectiveORG/command-handler/src/application/endpoints/businessConnection"
+	checkconnection "github.com/ChatDetectiveORG/command-handler/src/application/endpoints/checkConnection"
+	deletedata "github.com/ChatDetectiveORG/command-handler/src/application/endpoints/deleteData"
+	exportchat "github.com/ChatDetectiveORG/command-handler/src/application/endpoints/exportChat"
+	"github.com/ChatDetectiveORG/command-handler/src/application/endpoints/help"
+	howencryption "github.com/ChatDetectiveORG/command-handler/src/application/endpoints/howEncryption"
+	"github.com/ChatDetectiveORG/command-handler/src/application/endpoints/installation"
+	"github.com/ChatDetectiveORG/command-handler/src/application/endpoints/mirror"
+	"github.com/ChatDetectiveORG/command-handler/src/application/endpoints/referral"
+	"github.com/ChatDetectiveORG/command-handler/src/application/endpoints/settings"
+	"github.com/ChatDetectiveORG/command-handler/src/application/endpoints/start"
+	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/config"
+	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/rabbitmq"
+
+	e "github.com/ChatDetectiveORG/shared/errors"
+	h "github.com/ChatDetectiveORG/shared/handlers"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 var (
-	gorutineEndpoints = make(map[string]chan amqp.Delivery, 1000)
-	handlerTerminated = make(chan string, 1000)
-	errors            = make(chan *e.ErrorInfo, 1000)
-	rabbitmqChannel   *amqp.Channel
-	gcfg              *config.Config
+	errors          = make(chan *e.ErrorInfo, 1000)
+	rabbitmqChannel *amqp.Channel
 )
 
-func initRabbitmqQueue(cfg *config.Config) (<-chan amqp.Delivery, *amqp.Channel, *e.ErrorInfo) {
+const shardCount = 64
+
+func initRabbitmqQueue(cfg *config.Config) (<-chan amqp.Delivery, []string, *amqp.Channel, *e.ErrorInfo) {
 	rabbitmqChannel, err := rabbitmq.NewRabbitmqChannel(cfg)
 	if !err.IsNil() {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
-	consumer, unwrappedError := rabbitmqChannel.Consume(
-		"chatdetective.events.queue",
-		"main-consumer",
-		false, // Автоматически подтверждать поулчение
-		false,
-		false,
-		false,
-		amqp.Table{},
-	)
-	if unwrappedError != nil {
-		return nil, nil, e.FromError(unwrappedError, "Failed to init consumer for queue chatdetective.events.queue").WithSeverity(e.Critical)
+	_ = rabbitmqChannel.Qos(50, 0, false)
+
+	merged := make(chan amqp.Delivery, 1000)
+	consumerTags := make([]string, 0, shardCount)
+
+	var forwardWg sync.WaitGroup
+	forwardWg.Add(shardCount)
+
+	podID := os.Getenv("POD_ID")
+	if podID == "" {
+		podID = "unknown"
 	}
 
-	return consumer, rabbitmqChannel, e.Nil()
-}
+	for i := 0; i < shardCount; i++ {
+		q := fmtShardQueue(i)
+		tag := fmt.Sprintf("events-%s-%s", podID, q)
+		consumerTags = append(consumerTags, tag)
 
-type WorkerArgs struct {
-	wg          *sync.WaitGroup
-	ctx         context.Context
-	updatesChan chan amqp.Delivery
-	cfg         *config.Config
-	sessionId   string
+		consumer, unwrappedError := rabbitmqChannel.Consume(
+			q,
+			tag,
+			false,
+			false,
+			false,
+			false,
+			amqp.Table{},
+		)
+		if unwrappedError != nil {
+			_ = rabbitmqChannel.Close()
+			return nil, nil, nil, e.FromError(unwrappedError, "failed to init consumer").WithSeverity(e.Critical).WithData(map[string]any{"queue": q})
+		}
+
+		go func(c <-chan amqp.Delivery) {
+			defer forwardWg.Done()
+			for d := range c {
+				merged <- d
+			}
+		}(consumer)
+	}
+
+	go func() {
+		forwardWg.Wait()
+		close(merged)
+	}()
+
+	return merged, consumerTags, rabbitmqChannel, e.Nil()
 }
 
 func ListenToRabbitmq(cfg *config.Config, ctx context.Context, wg *sync.WaitGroup) *e.ErrorInfo {
-	gcfg = cfg // Чёрт, что я творю.........
 	var consumer <-chan amqp.Delivery
+	var consumerTags []string
 	var err *e.ErrorInfo
-	consumer, rabbitmqChannel, err = initRabbitmqQueue(cfg)
+	consumer, consumerTags, rabbitmqChannel, err = initRabbitmqQueue(cfg)
 	if !err.IsNil() {
 		return err
 	}
+	router.RabbitmqChannel = rabbitmqChannel
+	router.ReplicaCount = cfg.RuntimeConfig.NumRoutingGorutines
+	if router.ReplicaCount <= 0 {
+		router.ReplicaCount = shardCount
+	}
+	podID := cfg.RuntimeConfig.PodID
+	if podID == "" {
+		podID = "unknown"
+	}
+	router.InitSharding(podID, wg, ctx)
 	defer rabbitmqChannel.Close()
 
 	go hanleError(errors, ctx, wg)
@@ -72,24 +113,25 @@ func ListenToRabbitmq(cfg *config.Config, ctx context.Context, wg *sync.WaitGrou
 	for {
 		select {
 		case <-ctx.Done():
-			rabbitmqChannel.Cancel("main-consumer", false)
-			for sessionId, ch := range gorutineEndpoints {
-				delete(gorutineEndpoints, sessionId)
-				close(ch)
+			for _, tag := range consumerTags {
+				_ = rabbitmqChannel.Cancel(tag, false)
 			}
 			return e.Nil()
-		case sessionId := <-handlerTerminated:
-			if ch, ok := gorutineEndpoints[sessionId]; ok {
-				delete(gorutineEndpoints, sessionId)
-				close(ch)
-			}
 		case delivery, ok := <-consumer:
 			if !ok {
-				// consumer channel closed
-				// ToDo: Не подтверждать доставку
 				return e.FromError(nil, "RabbitMQ consumer channel closed").WithSeverity(e.Critical)
 			}
-			initNewHandlerOrPushToExisting(delivery, ctx, wg, cfg)
+			log.Printf("trace=%s received rk=%s", delivery.CorrelationId, delivery.RoutingKey)
+			if routeErr := router.HandleUpdate(delivery); !routeErr.IsNil() {
+				errors <- routeErr.WithData(map[string]any{"rk": delivery.RoutingKey}).WithSeverity(e.Critical)
+				if nackErr := delivery.Nack(false, false); nackErr != nil {
+					errors <- e.FromError(nackErr, "failed to nack delivery").WithSeverity(e.Critical)
+				}
+				continue
+			}
+			if ackErr := delivery.Ack(false); ackErr != nil {
+				errors <- e.FromError(ackErr, "Ошибка подтверждения получения")
+			}
 		}
 	}
 }
@@ -108,181 +150,68 @@ func hanleError(src chan (*e.ErrorInfo), context context.Context, wg *sync.WaitG
 	}
 }
 
-func initNewHandlerOrPushToExisting(delivery amqp.Delivery, ctx context.Context, wg *sync.WaitGroup, cfg *config.Config) {
-	keyParams := strings.Split(delivery.RoutingKey, ".")
-	if len(keyParams) != 3 {
-		errors <- e.NewError("Inavlid routing key!", "")
-		return
-	}
-
-	sessionId := keyParams[2]
-
-	if _, ok := gorutineEndpoints[sessionId]; ok {
-		gorutineEndpoints[sessionId] <- delivery
-	} else {
-		destChan := initHandler(ctx, wg, cfg, sessionId)
-		destChan <- delivery
-		gorutineEndpoints[sessionId] = destChan
-	}
-
-	// close(delivery.Ack(false))
+func fmtShardQueue(i int) string {
+	return fmt.Sprintf("%s.q%02d", config.PodType, i)
 }
 
-func initHandler(ctx context.Context, wg *sync.WaitGroup, cfg *config.Config, sessionId string) chan amqp.Delivery {
-	updatesChan := make(chan amqp.Delivery, 1000)
-
-	wg.Add(1)
-	go handle(WorkerArgs{
-		wg:          wg,
-		ctx:         ctx,
-		updatesChan: updatesChan,
-		cfg:         cfg,
-		sessionId:   sessionId,
-	})
-
-	return updatesChan
-}
-
-func handle(args WorkerArgs) {
-	defer args.wg.Done()
-
-	timer := time.NewTimer(args.cfg.RuntimeConfig.HandlerLiveDuration)
-	defer timer.Stop()
-
-	for {
-		select {
-		case <-args.ctx.Done():
-			// On shutdown the main loop may already be gone; don't block here.
-			select {
-			case handlerTerminated <- args.sessionId:
-			default:
-			}
-			return
-		case <-timer.C:
-			handlerTerminated <- args.sessionId
-			// TODO: Добавить подтверждение завершения обработки всех текущих апдейтов
-			return
-		case delivery, ok := <-args.updatesChan:
-			if !ok {
-				return
-			}
-			updateBytes := delivery.Body
-			var update tele.Update
-			unwrappedError := json.Unmarshal(updateBytes, &update)
-			if unwrappedError != nil {
-				errors <- e.FromError(unwrappedError, "failed to unmarshal update").WithSeverity(e.Critical)
-				continue
-			}
-			router.Dispatch(update)
-			// TODO: Сделать подтверждение зависимым от исхода обработки в Dispatch
-			unwrappedError = delivery.Ack(false)
-
-			if unwrappedError != nil {
-				errors <- e.FromError(unwrappedError, "Ошибка подтверждения получения")
-			}
-
-			err := DecreacePodLoad(gcfg)
-			if !err.IsNil() {
-				errors <- err.PushStack()
-			}
-
-			if !timer.Stop() {
-				select {
-				case <-timer.C:
-				default:
-				}
-			}
-			timer.Reset(args.cfg.RuntimeConfig.HandlerLiveDuration)
-		}
-	}
-}
-
-var router Router = Router{
+var router h.Router = h.Router{
 	ErrorChannel:    errors,
 	RabbitmqChannel: rabbitmqChannel,
-	Endpoints: []Endpoint{
-		{
-			handler: func(update tele.Update, timeout time.Duration) (handlerResponse, *e.ErrorInfo) {
-				return handlerResponse{
-					Method: "send_message",
-					SendData: map[string]any{
-						"text": "Hello, world!",
-					},
-					SenderBot: "@main",
-				}, e.Nil()
-			},
-			filter:  Or(Command([]string{"test", "start"}), TextCommand("test text command")),
-			timeout: time.Second * 10,
-			Name:    "test",
-		},
+	Endpoints: []h.Endpoint{
+		// /start command, legal consent gate and show-contacts callback
+		start.NewStartEndpoint(),
+		start.NewLegalConsentEndpoint(),
+		start.NewShowContactsEndpoint(),
+
+		// Installation guide
+		installation.NewInstallationEndpoint(),
+
+		// Settings page + toggle callbacks
+		settings.NewSettingsEndpoint(),
+		settings.NewToggleDeletedEndpoint(),
+		settings.NewToggleEditedEndpoint(),
+		settings.NewToggleSelfMediaEndpoint(),
+		settings.NewToggleExtExportEndpoint(),
+
+		// Help command
+		help.NewHelpEndpoint(),
+
+		// Business connection connect/disconnect
+		businessconnection.NewBusinessConnectionEndpoint(),
+
+		// Check connection
+		checkconnection.NewCheckConnectionEndpoint(),
+
+		// Mirror creation
+		mirror.NewCreateMirrorEndpoint(),
+		mirror.NewMirrorTokenEndpoint(),
+		mirror.NewMirrorListEndpoint(),
+		mirror.NewMirrorInfoEndpoint(),
+		mirror.NewMirrorDeleteEndpoint(),
+
+		// Referral program + all sub-callbacks
+		referral.NewReferralEndpoint(),
+		referral.NewBonusSelectEndpoint(),
+		referral.NewBonusDetailsEndpoint(),
+		referral.NewBonusBackEndpoint(),
+		referral.NewBonusMoneyEndpoint(),
+		referral.NewBonusLevelsEndpoint(),
+		referral.NewWhatLevelsEndpoint(),
+		referral.NewUpgradeLevelEndpoint(),
+		referral.NewUpgradeLevelCommandEndpoint(),
+		referral.NewLevelCommandEndpoint(),
+
+		// How encryption works
+		howencryption.NewHowEncryptionEndpoint(),
+
+		// Delete data command + confirm/cancel callbacks
+		deletedata.NewDeleteDataEndpoint(),
+		deletedata.NewDeleteConfirmEndpoint(),
+		deletedata.NewDeleteCancelEndpoint(),
+
+		// Chat export: list → preview → invoice. Actual export pipeline lives in chat-export-service.
+		exportchat.NewSelectChatEndpoint(),
+		exportchat.NewViewChatEndpoint(),
+		exportchat.NewRestoreChatEndpoint(),
 	},
-}
-
-func changePodList(script string, cfg *config.Config) *e.ErrorInfo {
-	redisScript := redigo.NewScript(1, script)
-
-	redisConnection, err := redis.NewRedisConnection(cfg)
-	if !err.IsNil() {
-		return err
-	}
-	defer redisConnection.Close()
-
-	key := fmt.Sprintf("pods:handlers:%s:load", cfg.RuntimeConfig.PodType)
-	_, unwrappedError := redisScript.Do(redisConnection, key, cfg.RuntimeConfig.PodID)
-	if unwrappedError != nil {
-		return e.FromError(unwrappedError, "Failed to execute script").WithSeverity(e.Critical)
-	}
-
-	return e.Nil()
-}
-
-func MakeAstatement(cfg *config.Config) *e.ErrorInfo {
-	err := changePodList(`
-		local key = KEYS[1]
-		local pod_id = ARGV[1]
-
-		return redis.call('ZADD', key, 0, pod_id)
-	`, cfg)
-
-	if !err.IsNil() {
-		return err.PushStack().WithData(map[string]any{"operation": "adding myself to pods zset"})
-	}
-
-	return e.Nil()
-}
-
-func DeleteMyselfFromRedis(cfg *config.Config) *e.ErrorInfo {
-	err := changePodList(`
-		local key = KEYS[1]
-		local pod_id = ARGV[1]
-
-		return redis.call('ZREM', key, pod_id)
-	`, cfg)
-
-	if !err.IsNil() {
-		return err.PushStack().WithData(map[string]any{"operation": "removing myself from pods zset"})
-	}
-
-	return e.Nil()
-}
-
-func DecreacePodLoad(cfg *config.Config) *e.ErrorInfo {
-	err := changePodList(`
-		local pod_id = ARGV[1]
-
-		local exists = redis.call("ZSCORE", KEYS[1], pod_id)
-
-		if exists then
-			redis.call("ZINCRBY", KEYS[1], -1, pod_id)
-			return pod_id
-		end
-
-		return nil
-	`, cfg)
-
-	if !err.IsNil() {
-		return err.PushStack().WithData(map[string]any{"operation": "decreacing my load"})
-	}
-
-	return e.Nil()
 }
