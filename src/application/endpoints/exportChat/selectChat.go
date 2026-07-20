@@ -6,8 +6,8 @@ import (
 	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/postgresql"
 	e "github.com/ChatDetectiveORG/shared/errors"
 	h "github.com/ChatDetectiveORG/shared/handlers"
+	telegram "github.com/ChatDetectiveORG/shared/messageBuilder"
 	models "github.com/ChatDetectiveORG/shared/postgresModels"
-	"github.com/ChatDetectiveORG/shared/telegram"
 	"github.com/ChatDetectiveORG/shared/utils"
 	tele "gopkg.in/telebot.v4"
 
@@ -63,7 +63,7 @@ func runShowContacts(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInf
 	if update.Callback != nil {
 		data = update.Callback.Data
 	}
-	
+
 	telegram.CreateGenericKeyboard[*models.Telegramuser](
 		&messageBuilder,
 		db.Model(&models.Telegramuser{}).
@@ -74,10 +74,10 @@ func runShowContacts(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInf
 		db,
 		data,
 		telegram.CreateGenericKeyboardParams{
-			ChatID: chatID,
-			PageUnique: constants.UniqueChatSelectPage,
+			ChatID:         chatID,
+			PageUnique:     constants.UniqueChatSelectPage,
 			ButtonsPerPage: 7,
-			ButtonsPerRow: 1,
+			ButtonsPerRow:  1,
 			ShowNavigation: true,
 			ButtonConversionArgs: telegram.TelegramButtonConversionArgs{
 				AdditionalData: map[string]any{

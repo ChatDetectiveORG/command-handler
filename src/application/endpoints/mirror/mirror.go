@@ -15,12 +15,13 @@ import (
 	e "github.com/ChatDetectiveORG/shared/errors"
 	h "github.com/ChatDetectiveORG/shared/handlers"
 	models "github.com/ChatDetectiveORG/shared/postgresModels"
+	sharedTelegram "github.com/ChatDetectiveORG/shared/telegram"
 	"github.com/gomodule/redigo/redis"
 	"github.com/google/uuid"
 	tele "gopkg.in/telebot.v4"
 
-	constants "github.com/ChatDetectiveORG/shared/constants"
 	helpers "github.com/ChatDetectiveORG/shared/commandHandlerUtils"
+	constants "github.com/ChatDetectiveORG/shared/constants"
 )
 
 const (
@@ -62,7 +63,7 @@ func runCreateMirror(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInf
 	if err := setWaitingForToken(update.Message.Chat.ID); e.IsNonNil(err) {
 		return err
 	}
-	
+
 	log.Printf("update.Message.Sender.IsPremium: %v", update.Message.Sender.IsPremium)
 	if update.Message.Sender.IsPremium == true {
 		return hashe.Emit(constants.OutgoingRoutingKey, buildInstructionMessage(update.Message))
@@ -185,6 +186,7 @@ func setMirrorWebhook(bot *tele.Bot, unique string) *e.ErrorInfo {
 	webhook := &tele.Webhook{
 		Endpoint:       &tele.WebhookEndpoint{PublicURL: buildMirrorWebhookURL(unique)},
 		MaxConnections: 100,
+		SecretToken:    sharedTelegram.WebhookSecret(),
 		AllowedUpdates: []string{
 			"message",
 			"callback_query",

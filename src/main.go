@@ -1,11 +1,11 @@
 package main
 
 import (
+	"context"
 	"github.com/ChatDetectiveORG/command-handler/src/application"
 	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/config"
 	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/metrics"
 	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/postgresql"
-	"context"
 	"os/signal"
 	"sync"
 	"syscall"
@@ -13,11 +13,18 @@ import (
 
 	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/rabbitmq"
 	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/redis"
+	utils "github.com/ChatDetectiveORG/shared/utils"
 	"log"
 )
 
 func main() {
-	config, _ := config.FetchConfig()
+	config, cfgErr := config.FetchConfig()
+	if !cfgErr.IsNil() {
+		log.Fatal(cfgErr.JSON())
+	}
+	if keyErr := utils.ValidateMasterKeyFromEnv(); !keyErr.IsNil() {
+		log.Fatal(keyErr.JSON())
+	}
 
 	err := rabbitmq.InitRabbitMQ(config, rabbitmq.RequiredModels)
 	if !err.IsNil() {

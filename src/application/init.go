@@ -158,8 +158,9 @@ var router h.Router = h.Router{
 	ErrorChannel:    errors,
 	RabbitmqChannel: rabbitmqChannel,
 	Endpoints: []h.Endpoint{
-		// /start command and show-contacts callback
+		// /start command, legal consent gate and show-contacts callback
 		start.NewStartEndpoint(),
+		start.NewLegalConsentEndpoint(),
 		start.NewShowContactsEndpoint(),
 
 		// Installation guide

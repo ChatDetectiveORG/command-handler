@@ -6,8 +6,8 @@ import (
 	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/postgresql"
 	e "github.com/ChatDetectiveORG/shared/errors"
 	h "github.com/ChatDetectiveORG/shared/handlers"
+	telegram "github.com/ChatDetectiveORG/shared/messageBuilder"
 	models "github.com/ChatDetectiveORG/shared/postgresModels"
-	"github.com/ChatDetectiveORG/shared/telegram"
 	"github.com/go-pg/pg/v10"
 	tele "gopkg.in/telebot.v4"
 
@@ -58,19 +58,19 @@ func NewDeleteCancelEndpoint() h.Endpoint {
 func buildWarningMessage(chatID int64) *tele.Message {
 	messageBuilder := telegram.MessageBuilder{Mdv2Enabled: true}
 	messageBuilder.WriteString(
-		"⚠️", telegram.TextFormat{Type: telegram.Link}.WithCustomEmojiID("5395358455768837479"),
+		"⚠️", telegram.TextFormat{Type: telegram.FormatLink}.WithCustomEmojiID("5395358455768837479"),
 	).WriteString(
-		"ВНИМАНИЕ", telegram.TextFormat{Type: telegram.Bold},
+		"ВНИМАНИЕ", telegram.TextFormat{Type: telegram.FormatBold},
 	).WriteString(
-		"⚠️", telegram.TextFormat{Type: telegram.Link}.WithCustomEmojiID("5395358455768837479"),
+		"⚠️", telegram.TextFormat{Type: telegram.FormatLink}.WithCustomEmojiID("5395358455768837479"),
 	).WriteString(
 		"\nУдаление данных сотрёт всю информацию о вас с наших серверов, включая совершённые транзакции. Это значит, что вы ",
 	).WriteString(
-		"НЕ", telegram.TextFormat{Type: telegram.Bold},
+		"НЕ", telegram.TextFormat{Type: telegram.FormatBold},
 	).WriteString(
 		" сможете восстановить свои чаты в случае их удаления и совершённые покупки.\n\n",
 	).WriteString(
-		"Это действие нельзя отменить. Вы уверены, что хотите стереть все данные?", telegram.TextFormat{Type: telegram.Italic},
+		"Это действие нельзя отменить. Вы уверены, что хотите стереть все данные?", telegram.TextFormat{Type: telegram.FormatItalic},
 	)
 
 	messageBuilder.AddButton(tele.InlineButton{Text: "Нет!", Data: constants.UniqueDeleteCancel})

@@ -2,14 +2,13 @@ package businessconnection
 
 import (
 	"errors"
-	"math"
 	"strconv"
 	"time"
 
 	e "github.com/ChatDetectiveORG/shared/errors"
 	h "github.com/ChatDetectiveORG/shared/handlers"
+	. "github.com/ChatDetectiveORG/shared/messageBuilder"
 	models "github.com/ChatDetectiveORG/shared/postgresModels"
-	"github.com/ChatDetectiveORG/shared/telegram"
 	"github.com/go-pg/pg/v10"
 	tele "gopkg.in/telebot.v4"
 
@@ -24,7 +23,7 @@ func getReferralAndLinkOwner(tx *pg.Tx, actor *models.Telegramuser) (*models.Ref
 	referral := &models.Referral{}
 	err := e.Wrap(tx.Model(referral).Where("invited_user_id = ?", actor.ID).Select())
 	if e.IsNonNil(err) {
-		if err.Err.Error() != "no rows in result set" {
+		if errors.Is(err.Err, pg.ErrNoRows) {
 			return nil, nil, err.WithSeverity(e.Ingnored)
 		}
 
@@ -99,25 +98,8 @@ func updateReferral(db *pg.DB, actor *models.Telegramuser, connected bool) *e.Er
 // Handles levels bonus for invitor (adds or removes levels based on connected status)
 // Takes: transaction, referral, message builder, connected (true if invited user connected bot)
 // Returns: error
-func handleLevels(tx *pg.Tx, referral *models.Referral, messageBuilder *telegram.MessageBuilder, connected bool) *e.ErrorInfo {
+func handleLevels(tx *pg.Tx, referral *models.Referral, messageBuilder *MessageBuilder, connected bool) *e.ErrorInfo {
 	invitorID := referral.InvitorID
-
-	err := e.Wrap(tx.Model(&models.UserLevels{}).
-		Where("linked_user_id = ?", invitorID).
-		Where("? = ANY(linked_referral_ids)", referral.ID).
-		Select(),
-	)
-	if e.IsNonNil(err) && !errors.Is(err.Err, pg.ErrNoRows) {
-		return err
-	}
-	if e.IsNil(err) && connected {
-		return e.NewError("referral already considered", "referral already considered").WithSeverity(e.Ingnored)
-	}
-
-	untrackedRalations, err := levelmanagement.GetUntrackedRelations(tx, invitorID)
-	if e.IsNonNil(err) {
-		return err
-	}
 
 	levelSummary, err := models.GetUserLevelSummary(tx, invitorID, time.Now())
 	if e.IsNonNil(err) {
@@ -143,6 +125,56 @@ func handleLevels(tx *pg.Tx, referral *models.Referral, messageBuilder *telegram
 		if e.IsNonNil(eRaw) {
 			return e.Wrap(eRaw)
 		}
+
+		_, eRaw = tx.Model(&models.Referral{}).
+			Where("id = ?", referral.ID).
+			Delete()
+		if e.IsNonNil(eRaw) {
+			return e.Wrap(eRaw)
+		}
+
+		untrackedRalations, err := levelmanagement.GetUntrackedRelations(tx, invitorID)
+		if e.IsNonNil(err) {
+			return err
+		}
+
+		levelsAdded, err := levelmanagement.RecountLevels(tx, untrackedRalations, invitorID)
+		if e.IsNonNil(err) {
+			return err
+		}
+
+		if levelsAdded == 0 {
+			messageBuilder.Write(
+				E("5462882007451185227", "🚫"),
+				T("Твой уровень снижен на 1."),
+				T("Сейчас он составляет: %d", Args{A: []any{levelSummary.Level - 1}}),
+			)
+		} else {
+			messageBuilder.Write(
+				E("5256047523620995497", "🔥"),
+				T("Твой уровень поднят на %d.", Args{A: []any{levelsAdded}}),
+				T("Сейчас он составляет: %d", Args{A: []any{levelSummary.Level + levelsAdded}}),
+			)
+		}
+
+		return e.Nil()
+	}
+
+	err = e.Wrap(tx.Model(&models.UserLevels{}).
+		Where("linked_user_id = ?", invitorID).
+		Where("? = ANY(linked_referral_ids)", referral.ID).
+		Select(),
+	)
+	if e.IsNonNil(err) && !errors.Is(err.Err, pg.ErrNoRows) {
+		return err
+	}
+	if e.IsNil(err) && connected {
+		return e.NewError("referral already considered", "referral already considered").WithSeverity(e.Ingnored)
+	}
+
+	untrackedRalations, err := levelmanagement.GetUntrackedRelations(tx, invitorID)
+	if e.IsNonNil(err) {
+		return err
 	}
 
 	levelsAdded, err := levelmanagement.RecountLevels(tx, untrackedRalations, invitorID)
@@ -150,49 +182,44 @@ func handleLevels(tx *pg.Tx, referral *models.Referral, messageBuilder *telegram
 		return err
 	}
 
+	userNumber := constants.ReferralBonusThresholdLevels - (len(untrackedRalations) - levelsAdded*constants.ReferralBonusThresholdLevels)
+
 	if levelsAdded == 0 {
-		messageBuilder.WriteString(
-			"🚫",
-			telegram.TextFormat{Type: telegram.Link}.WithCustomEmojiID("5462882007451185227"),
-		).WriteString("Твой уровень снижен на 1.\n").WriteString(
-			"Сейчас он составляет: " + strconv.Itoa(levelSummary.Level),
+		messageBuilder.Write(
+			E("5256047523620995497", "🔥"),
+			T("До поднятия уровня осталось привести %d пользователей!", Args{A: []any{userNumber}}),
+			T("Сейчас он составляет: %d", Args{A: []any{levelSummary.Level}}),
 		)
-
-		return e.Nil()
+	} else {
+		messageBuilder.Write(
+			T("Твой уровень сейчас составляет "+strconv.Itoa(levelSummary.Level+levelsAdded)),
+			T(""),
+			T("Ты получил уровней: %d", Args{A: []any{levelsAdded}}),
+			T("Приведи %d пользователей чтобы получить ещё один бонусный уровень!", Args{A: []any{userNumber}}),
+		)
 	}
-
-	messageBuilder.WriteString(
-		"Твой уровень сейчас составляет " + strconv.Itoa(levelSummary.Level+levelsAdded) + "\n\n",
-	).WriteString(
-		"Ты получил " + strconv.Itoa(levelsAdded) + " уровней\nПриведи " +
-			strconv.Itoa(constants.ReferralBonusThresholdLevels-(len(untrackedRalations)-levelsAdded*constants.ReferralBonusThresholdLevels)) +
-			" пользователей чтобы получить ещё один бонусный уровень!",
-	)
 
 	return e.Nil()
 }
 
 // Writes removed or added money bonus text
 // Takes: message builder, connected (true if invited user connected bot)
-func handleMoney(messageBuilder *telegram.MessageBuilder, connected bool) {
+func handleMoney(messageBuilder *MessageBuilder, connected bool) {
 	if connected {
-		messageBuilder.WriteString(
-			"🔥", telegram.TextFormat{Type: telegram.Link}.WithCustomEmojiID("5256047523620995497"),
-		).WriteString(
-			"Если он не будет отключать бота до ",
-		).WriteString(
-			time.Now().Add(time.Duration(constants.ReferralDiscountDurationSec)*time.Second + time.Hour*24).Format("02.01.2006"),
-		).WriteString(" ты получишь " + strconv.FormatInt(constants.ReferralBonusRub, 10) + " рублей на внутренний счёт бота")
+		creditDate := time.Now().Add(time.Duration(constants.ReferralDiscountDurationSec)*time.Second + time.Hour*24).Format("02.01.2006")
+		messageBuilder.Write(
+			E("5256047523620995497", "🔥"),
+			T("Если он не будет отключать бота до %s, ты получишь %d рублей на внутренний счёт бота", Args{A: []any{creditDate, constants.ReferralBonusRub}}),
+		)
 
 		return
 	}
 
-	messageBuilder.WriteString(
-		"🚫", telegram.TextFormat{Type: telegram.Link}.WithCustomEmojiID("5462882007451185227"),
-	).WriteString("Ты не получишь выплат за него\n").WriteString(
-		"Чтобы получить денги за него, он должен подключить бота и пользоваться им без перерыва в течение ",
-	).WriteString(
-		strconv.FormatFloat(math.Ceil(float64(time.Duration(constants.ReferralDiscountDurationSec).Hours()/24)), 'f', -1, 64) + " дней",
+	duration := time.Now().Add(time.Duration(constants.ReferralDiscountDurationSec)*time.Second + time.Hour*24).Format("02.01.2006")
+	messageBuilder.Write(
+		E("5462882007451185227", "🚫"),
+		T("Ты не получишь выплат за него"),
+		T("Чтобы получить денги за него, он должен подключить бота и пользоваться им без перерыва в течение %.0f", Args{A: []any{duration}}),
 	)
 }
 
@@ -214,8 +241,10 @@ func sendReferral(db *pg.DB, actor *models.Telegramuser, hashe *h.HandlerChainHa
 		return e.NewError("user_settings_not_found", "user settings not found").WithSeverity(e.Ingnored)
 	}
 
-	messageBuilder := telegram.MessageBuilder{Mdv2Enabled: true}
-	messageBuilder.WriteString("🔝", telegram.TextFormat{Type: telegram.Link}.WithCustomEmojiID("5463071033256848094"))
+	messageBuilder := MessageBuilder{Mdv2Enabled: true}
+	messageBuilder.Write(
+		E("5463071033256848094"),
+	)
 
 	actorFullName, err := actor.GetFullName()
 	if e.IsNonNil(err) {
@@ -225,13 +254,22 @@ func sendReferral(db *pg.DB, actor *models.Telegramuser, hashe *h.HandlerChainHa
 	if e.IsNonNil(err) {
 		return err
 	}
-	messageBuilder.WriteString("Пользователь ")
-	messageBuilder.WriteString(actorFullName, telegram.TextFormat{Type: telegram.Link}.WithUserMention(actorTgID))
+
+	messageBuilder.Write(
+		T("Пользователь ", Args{NoNewline: true}),
+		UserMention(actorFullName, actorTgID), T(" ", Args{NoNewline: true}),
+	)
 
 	if connected {
-		messageBuilder.WriteString(" подключил бота!\n\n")
+		messageBuilder.Write(
+			T("подключил бота!"),
+			T(""),
+		)
 	} else {
-		messageBuilder.WriteString(" отключил бота!\n\n")
+		messageBuilder.Write(
+			T("отключил бота!"),
+			T(""),
+		)
 	}
 
 	switch invitor.Settings.ReferralBonusPreference {
@@ -261,17 +299,18 @@ func sendReferral(db *pg.DB, actor *models.Telegramuser, hashe *h.HandlerChainHa
 		return e.FromError(eraw, "failed to commit transaction").WithSeverity(e.Critical)
 	}
 
-	return hashe.WithParseMode(true).Emit(constants.OutgoingRoutingKey, messageBuilder.Build(invitorTgID))
+	return hashe.Emit(constants.OutgoingRoutingKey, messageBuilder.Build(invitorTgID))
 }
 
 // Runs all referral functions and sends all needed messages
 // Takes: database, invited user, hashe, connection status(true if invited user connected bot)
 func referralMain(db *pg.DB, actor *models.Telegramuser, hashe *h.HandlerChainHashe, connected bool) *e.ErrorInfo {
 	if !connected {
-		if err := updateReferral(db, actor, false); e.IsNonNil(err) {
+		if err := sendReferral(db, actor, hashe, false); err != nil {
 			return err
 		}
-		return sendReferral(db, actor, hashe, false)
+
+		return updateReferral(db, actor, false)
 	}
 
 	err := sendReferral(db, actor, hashe, true)

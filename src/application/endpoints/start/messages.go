@@ -8,13 +8,14 @@ import (
 	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/postgresql"
 	e "github.com/ChatDetectiveORG/shared/errors"
 	h "github.com/ChatDetectiveORG/shared/handlers"
+	"github.com/ChatDetectiveORG/shared/legal"
 	models "github.com/ChatDetectiveORG/shared/postgresModels"
 	utils "github.com/ChatDetectiveORG/shared/utils"
 	"github.com/go-pg/pg/v10"
 	tele "gopkg.in/telebot.v4"
 
+	helpers "github.com/ChatDetectiveORG/shared/commandHandlerUtils"
 	constants "github.com/ChatDetectiveORG/shared/constants"
-	helpers "github.com/ChatDetectiveORG/shared/commandHandlerUtils" 
 )
 
 const showContactsUnique = constants.UniqueShowContacts
@@ -202,7 +203,7 @@ func createReferralModels(tx *pg.Tx, update tele.Update, startedUser *models.Tel
 	if alreadyWasBotUser {
 		return e.NewError(referralAlreadyExists, referralAlreadyExists).WithSeverity(e.Ingnored).PushStack(), nil, true
 	}
-	
+
 	referralCode := update.Message.Payload
 	linkOwner := &models.Telegramuser{
 		ReferralCode: referralCode,
@@ -227,7 +228,7 @@ func createReferralModels(tx *pg.Tx, update tele.Update, startedUser *models.Tel
 	}
 
 	model := &models.Referral{
-		InvitorID: linkOwner.ID,
+		InvitorID:     linkOwner.ID,
 		InvitedUserID: startedUser.ID,
 	}
 
@@ -257,13 +258,13 @@ func sendMessageToInvitor(invitorUser *models.Telegramuser, startedUser *models.
 	}
 
 	sb := strings.Builder{}
-	
+
 	if alreadyWasBotUser {
 		sb.WriteString("![😴](tg://emoji?id=5462990652943904884)Пользователь ")
 		sb.WriteString("[" + utils.EscapeMarkdownV2(invitedFullName) + "](tg://user?id=" + strconv.FormatInt(invitedUserID, 10) + ")")
 		sb.WriteString(" уже использует бота\n\n")
 		sb.WriteString("Бонус за него не будет начислен")
-	}else if userAlreadyInvited {
+	} else if userAlreadyInvited {
 		sb.WriteString("![😴](tg://emoji?id=5462990652943904884)Пользователь ")
 		sb.WriteString("[" + utils.EscapeMarkdownV2(invitedFullName) + "](tg://user?id=" + strconv.FormatInt(invitedUserID, 10) + ")")
 		sb.WriteString(" уже был приглашён тобой или другими пользователями\n\n")
@@ -298,7 +299,7 @@ func parseCommandPayload(message *tele.Message) {
 
 func checkReferralCode(tx *pg.Tx, update tele.Update, startedUser *models.Telegramuser, hash *h.HandlerChainHashe, signupCreatedUser bool) *e.ErrorInfo {
 	parseCommandPayload(update.Message)
-	
+
 	if update.Message.Payload == "" {
 		return e.Nil()
 	}
@@ -339,6 +340,17 @@ func run(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 
 	if eraw = tx.Commit(); eraw != nil {
 		return e.FromError(eraw, "failed to commit transaction").WithSeverity(e.Critical)
+	}
+
+	// Legal consent gate: before showing the main menu the user must accept the
+	// current version of the legal documents (see shared/legal).
+	docs := legal.FromEnv()
+	needsConsent, err := needsConsentGate(user, docs)
+	if e.IsNonNil(err) {
+		return err.PushStack()
+	}
+	if needsConsent {
+		return hashe.Emit(constants.OutgoingRoutingKey, buildConsentMessage(docs, chatID))
 	}
 
 	if err := hashe.Emit(constants.OutgoingRoutingKey, buildWelcomeMessage(tgUser, chatID)); e.IsNonNil(err) {

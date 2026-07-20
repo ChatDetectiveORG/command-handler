@@ -5,7 +5,7 @@ import (
 
 	e "github.com/ChatDetectiveORG/shared/errors"
 	h "github.com/ChatDetectiveORG/shared/handlers"
-	"github.com/ChatDetectiveORG/shared/telegram"
+	telegram "github.com/ChatDetectiveORG/shared/messageBuilder"
 	tele "gopkg.in/telebot.v4"
 
 	constants "github.com/ChatDetectiveORG/shared/constants"
@@ -29,17 +29,17 @@ func run(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 
 	mb := telegram.MessageBuilder{Mdv2Enabled: true}
 
-	mb.WriteString("Что умеет этот бот?", telegram.TextFormat{Type: telegram.Bold}).
+	mb.WriteString("Что умеет этот бот?", telegram.TextFormat{Type: telegram.FormatBold}).
 		WriteString("\n\nСписок основных команд:\n").
-		WriteString("/check_connection", telegram.TextFormat{Type: telegram.Mono}).
+		WriteString("/check_connection", telegram.TextFormat{Type: telegram.FormatMono}).
 		WriteString(" — проверить подключение\n").
-		WriteString("/ref", telegram.TextFormat{Type: telegram.Mono}).
+		WriteString("/ref", telegram.TextFormat{Type: telegram.FormatMono}).
 		WriteString(" — реферальная программа\n").
-		WriteString("/export", telegram.TextFormat{Type: telegram.Mono}).
+		WriteString("/export", telegram.TextFormat{Type: telegram.FormatMono}).
 		WriteString(" — экспорт чата\n").
-		WriteString("/delete_data", telegram.TextFormat{Type: telegram.Mono}).
+		WriteString("/delete_data", telegram.TextFormat{Type: telegram.FormatMono}).
 		WriteString(" — удалить данные\n\n").
 		WriteString("Не нашли ответ, хотите задать вопрос или сообщить о проблеме? Загляните в @ChatDetectiveSupport.")
 
-	return hashe.Emit(constants.OutgoingRoutingKey, mb.Build(chatID))
+	return hashe.WithParseMode(true).Emit(constants.OutgoingRoutingKey, mb.Build(chatID))
 }

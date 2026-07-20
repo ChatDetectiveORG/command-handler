@@ -7,8 +7,8 @@ import (
 	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/postgresql"
 	e "github.com/ChatDetectiveORG/shared/errors"
 	h "github.com/ChatDetectiveORG/shared/handlers"
+	telegram "github.com/ChatDetectiveORG/shared/messageBuilder"
 	models "github.com/ChatDetectiveORG/shared/postgresModels"
-	"github.com/ChatDetectiveORG/shared/telegram"
 	"github.com/ChatDetectiveORG/shared/utils"
 
 	tele "gopkg.in/telebot.v4"
@@ -52,20 +52,20 @@ func buildMessage(messageID int, chatID int64, sender *models.Telegramuser, inte
 	messageBuilder := telegram.MessageBuilder{Mdv2Enabled: true}
 
 	messageBuilder.WriteString(
-		"Чат с ", telegram.TextFormat{Type: telegram.Bold},
+		"Чат с ", telegram.TextFormat{Type: telegram.FormatBold},
 	).WriteString(
-		fullName, telegram.TextFormat{Type: telegram.Link}.WithUserMention(tgID), telegram.TextFormat{Type: telegram.Bold},
+		fullName, telegram.TextFormat{Type: telegram.FormatLink}.WithUserMention(tgID), telegram.TextFormat{Type: telegram.FormatBold},
 	).WriteString("\n")
 
 	if count > 0 {
 		messageBuilder.WriteString(
-			"Возможно восстановить "+strconv.Itoa(count)+" сообщений", telegram.TextFormat{Type: telegram.Italic},
+			"Возможно восстановить "+strconv.Itoa(count)+" сообщений", telegram.TextFormat{Type: telegram.FormatItalic},
 		)
 	} else {
 		messageBuilder.WriteString(
-			"К сожалению, чат не может быть восстановлен.", telegram.TextFormat{Type: telegram.Italic},
+			"К сожалению, чат не может быть восстановлен.", telegram.TextFormat{Type: telegram.FormatItalic},
 		).WriteString(
-			"Почему?", telegram.TextFormat{Type: telegram.Link, URL: "https://t.me/chatdetective_support/1210"},
+			"Почему?", telegram.TextFormat{Type: telegram.FormatLink, URL: "https://t.me/chatdetective_support/1210"},
 		)
 	}
 

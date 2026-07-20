@@ -14,8 +14,8 @@ import (
 	utils "github.com/ChatDetectiveORG/shared/utils"
 	tele "gopkg.in/telebot.v4"
 
+	helpers "github.com/ChatDetectiveORG/shared/commandHandlerUtils"
 	constants "github.com/ChatDetectiveORG/shared/constants"
-	helpers "github.com/ChatDetectiveORG/shared/commandHandlerUtils" 
 )
 
 func NewReferralEndpoint() h.Endpoint {
@@ -186,7 +186,7 @@ func buildReferralMessage(user *models.Telegramuser, chatID int64) *tele.Message
 // buildBonusSelectionMessage builds the bonus type selection view.
 func buildBonusSelectionMessage(chatID, msgID int64, currentPref string) *tele.Message {
 	text := fmt.Sprintf(
-		"Выберите бонус за приведённых пользователей:\n⏫%d рублей за каждого пользователя (во внутренней валюте бота)\n⏫Бесплатный уровень за каждых %d приведённых пользователей (приведённые пользователи учитываются системой 6 месяцев после подключения бота, уровни рассчитываются с округлением вниз)",
+		"Выберите бонус за приведённых пользователей:\n⏫%d рублей за каждого пользователя (во внутренней валюте бота)\n⏫Бесплатный уровень за каждых %d приведённых пользователей (приведённые пользователи учитываются системой 7 дней после подключения бота, уровни рассчитываются с округлением вниз)",
 		constants.ReferralBonusRub,
 		constants.ReferralBonusThresholdLevels,
 	)
@@ -501,7 +501,7 @@ func emitLevelInvoice(tgUserID int64, chatID int64, levels int, hashe *h.Handler
 		},
 		Invoice: &paymentservice.PaymentInvoiceOpts{
 			Title:       "Повышение уровня",
-			Description: fmt.Sprintf("Покупка %d уровня(ей) на месяц", levels),
+			Description: fmt.Sprintf("Покупка %d уровня(ей) на неделю", levels),
 			PriceLabel:  fmt.Sprintf("%d уровня(ей)", levels),
 		},
 		LevelUp: &paymentservice.LevelUpOpts{Levels: levels},

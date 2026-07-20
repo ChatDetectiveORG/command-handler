@@ -47,6 +47,7 @@ func InitPostgresql() *e.ErrorInfo {
 		(*models.Message)(nil),
 		(*models.MessageVersion)(nil),
 		(*models.Referral)(nil),
+		(*models.UserConsent)(nil),
 	}
 
 	for _, model := range models {
@@ -68,15 +69,19 @@ func InitPostgresql() *e.ErrorInfo {
 }
 
 func CreateIndexes(db *pg.DB) error {
-    // Индекс для поиска, где пользователь — первый в связке
-    _, err := db.Exec(`CREATE INDEX IF NOT EXISTS idx_relations_first_user ON user_relations (first_user_id)`)
-    if err != nil { return err }
+	// Индекс для поиска, где пользователь — первый в связке
+	_, err := db.Exec(`CREATE INDEX IF NOT EXISTS idx_relations_first_user ON user_relations (first_user_id)`)
+	if err != nil {
+		return err
+	}
 
-    // Индекс для поиска, где пользователь — второй в связке
-    _, err = db.Exec(`CREATE INDEX IF NOT EXISTS idx_relations_second_user ON user_relations (second_user_id)`)
-    if err != nil { return err }
+	// Индекс для поиска, где пользователь — второй в связке
+	_, err = db.Exec(`CREATE INDEX IF NOT EXISTS idx_relations_second_user ON user_relations (second_user_id)`)
+	if err != nil {
+		return err
+	}
 
 	_, err = db.Exec(`CREATE INDEX IF NOT EXISTS idx_messages_sender_id_hash ON messages (sender_id_hash)`)
 
-    return err
+	return err
 }
