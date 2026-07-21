@@ -88,7 +88,7 @@ func run(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 		return err
 	}
 
-	if user.BusinessConnectionIDHash != "" {
+	if user.IsConnected {
 		return hashe.WithParseMode(true).Emit(constants.OutgoingRoutingKey, buildConnectedMessage(chatID))
 	}
 
