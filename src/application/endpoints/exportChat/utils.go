@@ -27,10 +27,10 @@ func chatMessageCount(db *pg.DB, user, interlocutor *models.Telegramuser) (int, 
 func checkCallbackPermission(sender *models.Telegramuser, interlocutor *models.Telegramuser, db orm.DB) *e.ErrorInfo {
 	eRaw := db.Model(&models.UserRelations{}).
 		WhereGroup(func(q *pg.Query) (*pg.Query, error) {
-			return q.Where("first_user_id = ? AND second_user_id = ?", sender.ID, interlocutor.ID), nil
+			return q.Where("first_user_id_hash = ? AND second_user_id_hash = ?", sender.IDHash, interlocutor.IDHash), nil
 		}).
 		WhereOrGroup(func(q *pg.Query) (*pg.Query, error) {
-			return q.Where("first_user_id = ? AND second_user_id = ?", interlocutor.ID, sender.ID), nil
+			return q.Where("first_user_id_hash = ? AND second_user_id_hash = ?", interlocutor.IDHash, sender.IDHash), nil
 		}).
 		Limit(1).
 		Select()
