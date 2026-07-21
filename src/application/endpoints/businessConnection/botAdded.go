@@ -1,6 +1,8 @@
 package businessconnection
 
 import (
+	"log"
+
 	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/postgresql"
 	e "github.com/ChatDetectiveORG/shared/errors"
 	. "github.com/ChatDetectiveORG/shared/messageBuilder"
@@ -18,17 +20,22 @@ func ReplaceOldBusinessConnectionIdHash(db *pg.DB, userID int64) *e.ErrorInfo {
 	}
 	_, eRaw := db.Model((*postgresmodels.Message)(nil)).
 		Where("business_connection_id_hash = ?", user.LastBusinessConnectionIDHash).
-		Update("business_connection_id_hash = ?", user.BusinessConnectionIDHash)
+		Set("business_connection_id_hash = ?", user.BusinessConnectionIDHash).
+		Update()
 
 	if e.IsNonNil(eRaw) {
 		return e.FromError(eRaw, "failed to update business connection id hash").WithSeverity(e.Notice)
 	}
+
 	return e.Nil()
 }
 
 func buildConnectedMessage(chatID int64) *tele.Message {
 	db := postgresql.GetDB()
-	ReplaceOldBusinessConnectionIdHash(db, chatID)
+	err := ReplaceOldBusinessConnectionIdHash(db, chatID)
+	if e.IsNonNil(err) {
+		log.Println("failed to replace old business connection id hash", err)
+	}
 
 	messageBuilder := MessageBuilder{Mdv2Enabled: true}
 
