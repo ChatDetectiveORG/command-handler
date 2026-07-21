@@ -1,6 +1,7 @@
 package deletedata
 
 import (
+	"log"
 	"time"
 
 	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/postgresql"
@@ -93,11 +94,15 @@ func runDeleteCancel(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInf
 		return err
 	}
 
-	return hashe.EmitCallback(
+	err := hashe.EmitCallback(
 		constants.OutgoingRoutingKey,
 		update.Callback,
 		helpers.AnswerCallbackBanner("Данные не будут удалены", update.Callback),
 	)
+
+	log.Println("err", err)
+
+	return err
 }
 
 // Deletes ALL user data
