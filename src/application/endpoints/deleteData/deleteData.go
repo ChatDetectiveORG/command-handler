@@ -1,7 +1,6 @@
 package deletedata
 
 import (
-	"log"
 	"time"
 
 	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/postgresql"
@@ -14,6 +13,8 @@ import (
 
 	helpers "github.com/ChatDetectiveORG/shared/commandHandlerUtils"
 	constants "github.com/ChatDetectiveORG/shared/constants"
+
+	. "github.com/ChatDetectiveORG/shared/messageBuilder"
 )
 
 func NewDeleteDataEndpoint() h.Endpoint {
@@ -86,23 +87,19 @@ func runDeleteData(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo 
 
 // Sends message about data deletion cancellation
 func runDeleteCancel(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
+	if err := hashe.EmitCallback(
+		constants.OutgoingRoutingKey,
+		update.Callback,
+		helpers.AnswerCallbackBanner("Данные не будут удалены", update.Callback),
+	); e.IsNonNil(err) {
+		return err
+	}
+
 	deleteMsg := &tele.Message{
 		ID:   update.Callback.Message.ID,
 		Chat: update.Callback.Message.Chat,
 	}
-	if err := hashe.EmitDeleteMessage(constants.OutgoingRoutingKey, deleteMsg); e.IsNonNil(err) {
-		return err
-	}
-
-	err := hashe.EmitCallback(
-		constants.OutgoingRoutingKey,
-		update.Callback,
-		helpers.AnswerCallbackBanner("Данные не будут удалены", update.Callback),
-	)
-
-	log.Println("err", err)
-
-	return err
+	return hashe.EmitDeleteMessage(constants.OutgoingRoutingKey, deleteMsg)
 }
 
 // Deletes ALL user data
@@ -111,6 +108,15 @@ func runDeleteCancel(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInf
 //
 // UserRelations are not deleted, because deletion can lead to poor experience of interlocutors in chats with user that initiated data deletion. (they are owners of this data too.)
 func runDeleteConfirm(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
+	// answerCallbackQuery must reach Telegram quickly; DB work and deleteMessage are slower.
+	if err := hashe.EmitCallback(
+		constants.OutgoingRoutingKey,
+		update.Callback,
+		helpers.AnswerCallbackBanner("Удаление данных...", update.Callback),
+	); e.IsNonNil(err) {
+		return err
+	}
+
 	db := postgresql.GetDB()
 	tgUserID := update.Callback.Sender.ID
 
@@ -180,15 +186,17 @@ func runDeleteConfirm(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorIn
 		return e.FromError(eraw, "failed to commit delete transaction").WithSeverity(e.Critical)
 	}
 
+	b := MessageBuilder{}
+	b.Write(T("Данные удалены успешно!"))
+
+	err = hashe.Emit(constants.OutgoingRoutingKey, b.Build(update.Callback.Message.Chat.ID))
+	if e.IsNonNil(err) {
+		return err
+	}
+
 	deleteMsg := &tele.Message{
 		ID:   update.Callback.Message.ID,
 		Chat: update.Callback.Message.Chat,
 	}
-	_ = hashe.EmitDeleteMessage(constants.OutgoingRoutingKey, deleteMsg)
-
-	return hashe.EmitCallback(
-		constants.OutgoingRoutingKey,
-		update.Callback,
-		helpers.AnswerCallbackBanner("Данные удалены успешно!", update.Callback),
-	)
+	return hashe.EmitDeleteMessage(constants.OutgoingRoutingKey, deleteMsg)
 }
