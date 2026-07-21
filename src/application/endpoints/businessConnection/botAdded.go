@@ -1,11 +1,35 @@
 package businessconnection
 
 import (
+	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/postgresql"
+	e "github.com/ChatDetectiveORG/shared/errors"
 	. "github.com/ChatDetectiveORG/shared/messageBuilder"
+	postgresmodels "github.com/ChatDetectiveORG/shared/postgresModels"
+	"github.com/go-pg/pg/v10"
 	tele "gopkg.in/telebot.v4"
 )
 
+// Replace old business connection id hash to new in Messages table
+func ReplaceOldBusinessConnectionIdHash(db *pg.DB, userID int64) *e.ErrorInfo {
+	var user = &postgresmodels.Telegramuser{}
+	err := user.GetByTelegramID(db, userID)
+	if e.IsNonNil(err) {
+		return err
+	}
+	_, eRaw := db.Model((*postgresmodels.Message)(nil)).
+		Where("business_connection_id_hash = ?", user.LastBusinessConnectionIDHash).
+		Update("business_connection_id_hash = ?", user.BusinessConnectionIDHash)
+
+	if e.IsNonNil(eRaw) {
+		return e.FromError(eRaw, "failed to update business connection id hash").WithSeverity(e.Notice)
+	}
+	return e.Nil()
+}
+
 func buildConnectedMessage(chatID int64) *tele.Message {
+	db := postgresql.GetDB()
+	ReplaceOldBusinessConnectionIdHash(db, chatID)
+
 	messageBuilder := MessageBuilder{Mdv2Enabled: true}
 
 	messageBuilder.Write(
