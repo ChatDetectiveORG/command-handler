@@ -123,9 +123,8 @@ func ListenToRabbitmq(cfg *config.Config, ctx context.Context, wg *sync.WaitGrou
 				}, nil
 			},
 			OnConnect: func(session *amqputil.ConsumerSession) {
-				router.OpenRabbitmqChannel = openRabbitmqChannel(cfg)
-				if refreshErr := router.RefreshRabbitmqSession(session.Channel, wg, ctx); !refreshErr.IsNil() {
-					log.Printf("command-handler: refresh send-result consumers failed: %s", refreshErr.JSON())
+				if connectErr := router.ConnectRabbitmqSession(session.Channel, openRabbitmqChannel(cfg), wg, podID, ctx); !connectErr.IsNil() {
+					log.Printf("command-handler: outgoing session setup failed: %s", connectErr.JSON())
 				}
 			},
 			OnDelivery: func(delivery amqp.Delivery) {
