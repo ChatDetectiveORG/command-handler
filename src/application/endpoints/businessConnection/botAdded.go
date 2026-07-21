@@ -18,10 +18,14 @@ func ReplaceOldBusinessConnectionIdHash(db *pg.DB, userID int64) *e.ErrorInfo {
 	if e.IsNonNil(err) {
 		return err
 	}
-	_, eRaw := db.Model((*postgresmodels.Message)(nil)).
-		Where("business_connection_id_hash = ?", user.LastBusinessConnectionIDHash).
-		Set("business_connection_id_hash = ?", user.BusinessConnectionIDHash).
-		Update()
+
+	updatedFields := &postgresmodels.Message{
+		BusinessConnectionIDHash: user.BusinessConnectionIDHash,
+	}
+	_, eRaw := db.Model(updatedFields).
+    Column("business_connection_id_hash").
+    Where("business_connection_id_hash = ?", user.LastBusinessConnectionIDHash).
+    Update()
 
 	if e.IsNonNil(eRaw) {
 		return e.FromError(eRaw, "failed to update business connection id hash").WithSeverity(e.Notice)
