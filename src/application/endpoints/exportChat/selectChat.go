@@ -67,8 +67,8 @@ func runShowContacts(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInf
 	telegram.CreateGenericKeyboard[*models.Telegramuser](
 		&messageBuilder,
 		db.Model(&models.Telegramuser{}).
-			Join("JOIN user_relations AS r ON (r.first_user_id = telegramuser.id AND r.second_user_id = ?) OR (r.second_user_id = telegramuser.id AND r.first_user_id = ?)", sender.ID, sender.ID).
-			Where("telegramuser.id != ?", sender.ID).
+			Join("JOIN user_relations AS r ON (r.first_user_id_hash = telegramuser.id_hash AND r.second_user_id_hash = ?) OR (r.second_user_id_hash = telegramuser.id_hash AND r.first_user_id_hash = ?)", sender.IDHash, sender.IDHash).
+			Where("telegramuser.id_hash != ?", sender.IDHash).
 			Order("telegramuser.created_at ASC"),
 		redisConn,
 		db,
