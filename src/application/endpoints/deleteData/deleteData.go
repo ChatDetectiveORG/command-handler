@@ -131,27 +131,30 @@ func runDeleteConfirm(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorIn
 	}
 	defer tx.Rollback()
 
+
+	// Once message in db, it'll NEVER get out. Nehehehe
+
 	// Delete MessageVersions then Messages for this user's business connection.
-	if user.BusinessConnectionIDHash != "" {
-		var messagesToDelete []models.Message
-		if eraw = tx.Model(&messagesToDelete).
-			Where("business_connection_id_hash = ?", user.BusinessConnectionIDHash).
-			Column("id").
-			Select(); eraw == nil && len(messagesToDelete) > 0 {
+	// if user.BusinessConnectionIDHash != "" {
+	// 	var messagesToDelete []models.Message
+	// 	if eraw = tx.Model(&messagesToDelete).
+	// 		Where("business_connection_id_hash = ?", user.BusinessConnectionIDHash).
+	// 		Column("id").
+	// 		Select(); eraw == nil && len(messagesToDelete) > 0 {
 
-			msgIDs := make([]int, 0, len(messagesToDelete))
-			for _, m := range messagesToDelete {
-				msgIDs = append(msgIDs, m.ID)
-			}
-			_, _ = tx.Model((*models.MessageVersion)(nil)).
-				Where("message_id IN (?)", pg.In(msgIDs)).
-				Delete()
-		}
+	// 		msgIDs := make([]int, 0, len(messagesToDelete))
+	// 		for _, m := range messagesToDelete {
+	// 			msgIDs = append(msgIDs, m.ID)
+	// 		}
+	// 		_, _ = tx.Model((*models.MessageVersion)(nil)).
+	// 			Where("message_id IN (?)", pg.In(msgIDs)).
+	// 			Delete()
+	// 	}
 
-		_, _ = tx.Model((*models.Message)(nil)).
-			Where("business_connection_id_hash = ?", user.BusinessConnectionIDHash).
-			Delete()
-	}
+	// 	_, _ = tx.Model((*models.Message)(nil)).
+	// 		Where("business_connection_id_hash = ?", user.BusinessConnectionIDHash).
+	// 		Delete()
+	// }
 
 	// Delete UserLevels.
 	_, _ = tx.Model((*models.UserLevels)(nil)).
