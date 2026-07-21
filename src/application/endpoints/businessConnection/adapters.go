@@ -8,6 +8,7 @@ import (
 	e "github.com/ChatDetectiveORG/shared/errors"
 	h "github.com/ChatDetectiveORG/shared/handlers"
 	postgresmodels "github.com/ChatDetectiveORG/shared/postgresModels"
+	utils "github.com/ChatDetectiveORG/shared/utils"
 	tele "gopkg.in/telebot.v4"
 
 	commandhandlerutils "github.com/ChatDetectiveORG/shared/commandHandlerUtils"
@@ -44,25 +45,26 @@ func run(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 	}
 
 	if conn.Enabled {
-		var user = &postgresmodels.Telegramuser{}
-		err := user.GetByTelegramID(db, userChatID)
-		if e.IsNonNil(err) {
-			return err
+		previousHash := user.BusinessConnectionIDHash
+		newHash, hashErr := utils.ToSecureHash(conn.ID)
+		if e.IsNonNil(hashErr) {
+			return hashErr
 		}
 
-		updatedFields := &postgresmodels.Message{
-			BusinessConnectionIDHash: user.BusinessConnectionIDHash,
+		if previousHash != "" {
+			updatedFields := &postgresmodels.Message{
+				BusinessConnectionIDHash: newHash,
+			}
+			_, eRaw := db.Model(updatedFields).
+				Column("business_connection_id_hash").
+				Where("business_connection_id_hash = ?", previousHash).
+				Update()
+			if e.IsNonNil(eRaw) {
+				return e.FromError(eRaw, "failed to update business connection id hash").WithSeverity(e.Notice)
+			}
 		}
-		_, eRaw := db.Model(updatedFields).
-		Column("business_connection_id_hash").
-		Where("business_connection_id_hash = ?", user.LastBusinessConnectionIDHash).
-		Update()
 
-		if e.IsNonNil(eRaw) {
-			return e.FromError(eRaw, "failed to update business connection id hash").WithSeverity(e.Notice)
-		}
-
-		if err := commandhandlerutils.UpdateBusinessConnectionIDHash(db, user, conn.ID); e.IsNonNil(err) {
+		if err := commandhandlerutils.SetBusinessConnectionConnected(db, user, conn.ID); e.IsNonNil(err) {
 			return err
 		}
 
@@ -75,7 +77,7 @@ func run(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 			return err
 		}
 	} else {
-		if err := commandhandlerutils.UpdateBusinessConnectionIDHash(db, user, ""); e.IsNonNil(err) {
+		if err := commandhandlerutils.SetBusinessConnectionDisconnected(db, user); e.IsNonNil(err) {
 			return err
 		}
 
