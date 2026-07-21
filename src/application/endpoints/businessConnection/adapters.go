@@ -7,6 +7,7 @@ import (
 	"github.com/ChatDetectiveORG/shared/constants"
 	e "github.com/ChatDetectiveORG/shared/errors"
 	h "github.com/ChatDetectiveORG/shared/handlers"
+	postgresmodels "github.com/ChatDetectiveORG/shared/postgresModels"
 	tele "gopkg.in/telebot.v4"
 
 	commandhandlerutils "github.com/ChatDetectiveORG/shared/commandHandlerUtils"
@@ -43,6 +44,24 @@ func run(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 	}
 
 	if conn.Enabled {
+		var user = &postgresmodels.Telegramuser{}
+		err := user.GetByTelegramID(db, userChatID)
+		if e.IsNonNil(err) {
+			return err
+		}
+
+		updatedFields := &postgresmodels.Message{
+			BusinessConnectionIDHash: user.BusinessConnectionIDHash,
+		}
+		_, eRaw := db.Model(updatedFields).
+		Column("business_connection_id_hash").
+		Where("business_connection_id_hash = ?", user.LastBusinessConnectionIDHash).
+		Update()
+
+		if e.IsNonNil(eRaw) {
+			return e.FromError(eRaw, "failed to update business connection id hash").WithSeverity(e.Notice)
+		}
+
 		if err := commandhandlerutils.UpdateBusinessConnectionIDHash(db, user, conn.ID); e.IsNonNil(err) {
 			return err
 		}
