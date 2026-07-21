@@ -8,7 +8,6 @@ import (
 	h "github.com/ChatDetectiveORG/shared/handlers"
 	telegram "github.com/ChatDetectiveORG/shared/messageBuilder"
 	models "github.com/ChatDetectiveORG/shared/postgresModels"
-	"github.com/go-pg/pg/v10"
 	tele "gopkg.in/telebot.v4"
 
 	helpers "github.com/ChatDetectiveORG/shared/commandHandlerUtils"
