@@ -19,6 +19,9 @@ func ReplaceOldBusinessConnectionIdHash(db *pg.DB, userID int64) *e.ErrorInfo {
 		return err
 	}
 
+	log.Println("Fuck the ", user.BusinessConnectionIDHash)
+	log.Println("Fuck the ", user.LastBusinessConnectionIDHash)
+
 	updatedFields := &postgresmodels.Message{
 		BusinessConnectionIDHash: user.BusinessConnectionIDHash,
 	}
