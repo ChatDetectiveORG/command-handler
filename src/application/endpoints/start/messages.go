@@ -8,7 +8,6 @@ import (
 	"github.com/ChatDetectiveORG/command-handler/src/infrastructure/postgresql"
 	e "github.com/ChatDetectiveORG/shared/errors"
 	h "github.com/ChatDetectiveORG/shared/handlers"
-	"github.com/ChatDetectiveORG/shared/legal"
 	models "github.com/ChatDetectiveORG/shared/postgresModels"
 	utils "github.com/ChatDetectiveORG/shared/utils"
 	"github.com/go-pg/pg/v10"
@@ -342,16 +341,19 @@ func run(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 		return e.FromError(eraw, "failed to commit transaction").WithSeverity(e.Critical)
 	}
 
+	// !!! Until official registration, do not show consent
+	// Now - commented
+
 	// Legal consent gate: before showing the main menu the user must accept the
 	// current version of the legal documents (see shared/legal).
-	docs := legal.FromEnv()
-	needsConsent, err := needsConsentGate(user, docs)
-	if e.IsNonNil(err) {
-		return err.PushStack()
-	}
-	if needsConsent {
-		return hashe.Emit(constants.OutgoingRoutingKey, buildConsentMessage(docs, chatID))
-	}
+	// docs := legal.FromEnv()
+	// needsConsent, err := needsConsentGate(user, docs)
+	// if e.IsNonNil(err) {
+	// 	return err.PushStack()
+	// }
+	// if needsConsent {
+	// 	return hashe.Emit(constants.OutgoingRoutingKey, buildConsentMessage(docs, chatID))
+	// }
 
 	if err := hashe.Emit(constants.OutgoingRoutingKey, buildWelcomeMessage(tgUser, chatID)); e.IsNonNil(err) {
 		return err.PushStack()
